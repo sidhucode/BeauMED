@@ -6,82 +6,37 @@
  */
 
 import React from 'react';
-import { 
-  SafeAreaView,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  useColorScheme,
-  View,
-} from 'react-native';
+import {StatusBar, useColorScheme, View} from 'react-native';
+import {RouterProvider, useRouter} from './src/navigation/SimpleRouter';
+import {Dashboard, GenericScreen} from './src/screens';
+import BottomNav from './src/components/BottomNav';
 
-function App(): React.JSX.Element {
+function Shell() {
   const isDarkMode = useColorScheme() === 'dark';
-
-  const backgroundStyle = {
-    backgroundColor: isDarkMode ? '#2b2b2b' : '#f3f3f3',
-  };
+  const {route} = useRouter();
 
   return (
-    <SafeAreaView style={[styles.container, backgroundStyle]}>
-      <StatusBar
-        barStyle={isDarkMode ? 'light-content' : 'dark-content'}
-        backgroundColor={backgroundStyle.backgroundColor}
-      />
-      <ScrollView
-        contentInsetAdjustmentBehavior="automatic"
-        style={backgroundStyle}>
-        <View style={styles.header}>
-          <Text style={[styles.headerTitle, { color: isDarkMode ? '#fff' : '#000' }]}>
-            BeauMED
-          </Text>
-        </View>
-        <View style={[styles.body, { backgroundColor: isDarkMode ? '#1a1a1a' : '#fff' }]}>
-          <Text style={[styles.sectionTitle, { color: isDarkMode ? '#fff' : '#000' }]}>
-            Welcome to BeauMED!
-          </Text>
-          <Text style={[styles.sectionDescription, { color: isDarkMode ? '#ccc' : '#666' }]}>
-            Your React Native boilerplate is ready for development.
-          </Text>
-          <Text style={[styles.sectionDescription, { color: isDarkMode ? '#ccc' : '#666' }]}>
-            Edit App.tsx to get started building your application.
-          </Text>
-        </View>
-      </ScrollView>
-    </SafeAreaView>
+    <View style={{flex: 1, backgroundColor: isDarkMode ? '#0b1020' : '#f7f7fb'}}>
+      <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
+      {route === 'Dashboard' && <Dashboard />}
+      {route === 'Symptoms' && <GenericScreen title="Symptoms" subtitle="Track and log symptoms" />}
+      {route === 'Medications' && <GenericScreen title="Medications" subtitle="Manage your meds" />}
+      {route === 'Profile' && <GenericScreen title="Profile" subtitle="View and update profile" />}
+      {route === 'Doctors' && <GenericScreen title="Doctors" subtitle="Find and manage doctors" />}
+      {route === 'Assistant' && <GenericScreen title="AI Assistant" subtitle="Ask questions and get help" />}
+      {route === 'Auth' && <GenericScreen title="Auth" subtitle="Sign in / Sign up" />}
+      {route === 'Onboarding' && <GenericScreen title="Onboarding" subtitle="Get started" />}
+      {route === 'Index' && <GenericScreen title="Welcome" subtitle="Blank landing" />}
+      {route === 'NotFound' && <GenericScreen title="Not Found" subtitle="This page is not available" />}
+      <BottomNav />
+    </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  header: {
-    padding: 20,
-    alignItems: 'center',
-  },
-  headerTitle: {
-    fontSize: 32,
-    fontWeight: 'bold',
-  },
-  body: {
-    margin: 20,
-    padding: 20,
-    borderRadius: 10,
-  },
-  sectionTitle: {
-    fontSize: 24,
-    fontWeight: '600',
-    textAlign: 'center',
-    marginBottom: 10,
-  },
-  sectionDescription: {
-    fontSize: 16,
-    fontWeight: '400',
-    textAlign: 'center',
-    marginBottom: 10,
-  },
-});
-
-export default App;
+export default function App(): React.JSX.Element {
+  return (
+    <RouterProvider initialRoute="Dashboard">
+      <Shell />
+    </RouterProvider>
+  );
+}
