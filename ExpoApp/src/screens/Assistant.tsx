@@ -1,6 +1,8 @@
 import React, {useState} from 'react';
-import {SafeAreaView, View, Text, StyleSheet, TextInput, Pressable, FlatList} from 'react-native';
+import {SafeAreaView, View, Text, StyleSheet, TextInput, Pressable, FlatList, ActivityIndicator} from 'react-native';
 import {useRouter} from '../navigation/SimpleRouter';
+import { get, post } from 'aws-amplify/api';
+import { fetchAuthSession } from 'aws-amplify/auth';
 
 type Message = { id: number; role: 'user' | 'assistant'; content: string };
 
@@ -10,17 +12,44 @@ export default function AssistantScreen() {
     {id: 1, role: 'assistant', content: "Hello! I'm your AI health assistant. How can I help you today? You can ask me about your medications, symptoms, or general health questions."},
   ]);
   const [input, setInput] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const send = () => {
+  const send = async () => {
     const text = input.trim();
-    if (!text) return;
+    if (!text || loading) return;
+    
     const user: Message = {id: messages.length + 1, role: 'user', content: text};
     setMessages(prev => [...prev, user]);
     setInput('');
-    setTimeout(() => {
-      const ai: Message = {id: user.id + 1, role: 'assistant', content: "I understand. If symptoms worsen or persist, contact your healthcare provider. Want me to help find a nearby doctor?"};
+    setLoading(true);
+
+    try {
+      const session = await fetchAuthSession();
+      const token = session?.tokens?.idToken?.toString();
+      
+      const response = await post({
+        apiName: 'beaumedApi',
+        path: '/chat',
+        options: {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: { message: text }
+        }
+      }).response;
+      
+      const result = await response.body.json() as any;
+      const aiContent = result?.response || "I couldn't process that. Please try again.";
+      const ai: Message = {id: user.id + 1, role: 'assistant', content: aiContent};
       setMessages(prev => [...prev, ai]);
-    }, 800);
+    } catch (error) {
+      console.error('Chat error:', error);
+      const error_msg: Message = {id: user.id + 1, role: 'assistant', content: "Sorry, I encountered an error. Please try again."};
+      setMessages(prev => [...prev, error_msg]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

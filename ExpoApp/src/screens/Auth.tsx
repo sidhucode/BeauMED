@@ -1,21 +1,108 @@
-import React, {useState} from 'react';
-import {SafeAreaView, View, Text, StyleSheet, TextInput, Pressable, Keyboard, InputAccessoryView, Platform} from 'react-native';
+import React, {useState, useEffect} from 'react';
+import {SafeAreaView, View, Text, StyleSheet, TextInput, Pressable, Alert} from 'react-native';
 import {useRouter} from '../navigation/SimpleRouter';
+import {signUp, signIn, signOut, getCurrentUser} from 'aws-amplify/auth';
 
 export default function AuthScreen() {
   const {navigate} = useRouter();
   const [tab, setTab] = useState<'login'|'signup'>('login');
   const [loading, setLoading] = useState(false);
-  const accessoryId = 'auth-input-accessory';
-  const isIOS = Platform.OS === 'ios';
-  const accessory = isIOS ? accessoryId : undefined;
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  // Check if user is already logged in
+  useEffect(() => {
+    checkAuthStatus();
+  }, []);
+
+  const checkAuthStatus = async () => {
+    try {
+      const user = await getCurrentUser();
+      if (user) {
+        setIsAuthenticated(true);
+        navigate('Dashboard');
+      }
+    } catch (error) {
+      // User not authenticated, stay on Auth screen
+      console.log('User not authenticated');
+    }
+  };
+
+  const handleSignUp = async () => {
+    if (!email || !password || !confirmPassword || !name || !phone) {
+      Alert.alert('Error', 'Please fill in all fields');
+      return;
+    }
+    if (password !== confirmPassword) {
+      Alert.alert('Error', 'Passwords do not match');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const result = await signUp({
+        username: email,
+        password,
+        options: {
+          userAttributes: {
+            email,
+            name,
+            phone_number: phone, // Add phone number (required by Cognito)
+          },
+        },
+      });
+      console.log('Sign Up Success:', result);
+      Alert.alert('Success', 'Account created! If email verification is required, check your email to confirm. Then return to Sign In.');
+      setTab('login');
+      setEmail('');
+      setPassword('');
+      setConfirmPassword('');
+      setName('');
+      setPhone('');
+    } catch (error: any) {
+      console.error('Sign Up Error:', error);
+      Alert.alert('Sign Up Error', error.message || 'Failed to create account');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSignIn = async () => {
+    if (!email || !password) {
+      Alert.alert('Error', 'Please enter email and password');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await signIn({
+        username: email,
+        password,
+      });
+      setIsAuthenticated(true);
+      navigate('Dashboard');
+    } catch (error: any) {
+      console.error('Sign In Error Details:', error);
+      console.error('Error Code:', error.code);
+      console.error('Error Name:', error.name);
+      console.error('Error Message:', error.message);
+      console.error('Full Error:', JSON.stringify(error, null, 2));
+      Alert.alert('Sign In Error', error.message || error.code || 'Failed to sign in. Check console for details.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const submit = () => {
-    setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
-      navigate('Dashboard');
-    }, 800);
+    if (tab === 'login') {
+      handleSignIn();
+    } else {
+      handleSignUp();
+    }
   };
 
   return (
@@ -38,21 +125,23 @@ export default function AuthScreen() {
       {tab === 'login' ? (
         <View style={styles.form}> 
           <Text style={styles.label}>Email</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="you@example.com"
-            keyboardType="email-address"
+          <TextInput 
+            style={styles.input} 
+            placeholder="you@example.com" 
+            keyboardType="email-address" 
             autoCapitalize="none"
-            inputAccessoryViewID={accessory}
-            returnKeyType="done"
+            value={email}
+            onChangeText={setEmail}
+            editable={!loading}
           />
           <Text style={styles.label}>Password</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="••••••••"
-            secureTextEntry
-            inputAccessoryViewID={accessory}
-            returnKeyType="done"
+          <TextInput 
+            style={styles.input} 
+            placeholder="••••••••" 
+            secureTextEntry 
+            value={password}
+            onChangeText={setPassword}
+            editable={!loading}
           />
           <Pressable>
             <Text style={styles.link}>Forgot password?</Text>
@@ -64,59 +153,54 @@ export default function AuthScreen() {
       ) : (
         <View style={styles.form}>
           <Text style={styles.label}>Full Name</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="John Doe"
-            inputAccessoryViewID={accessory}
-            returnKeyType="done"
+          <TextInput 
+            style={styles.input} 
+            placeholder="John Doe" 
+            value={name}
+            onChangeText={setName}
+            editable={!loading}
           />
           <Text style={styles.label}>Email</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="you@example.com"
-            keyboardType="email-address"
+          <TextInput 
+            style={styles.input} 
+            placeholder="you@example.com" 
+            keyboardType="email-address" 
             autoCapitalize="none"
-            inputAccessoryViewID={accessory}
-            returnKeyType="done"
+            value={email}
+            onChangeText={setEmail}
+            editable={!loading}
+          />
+          <Text style={styles.label}>Phone Number</Text>
+          <TextInput 
+            style={styles.input} 
+            placeholder="+1 (555) 123-4567" 
+            keyboardType="phone-pad"
+            value={phone}
+            onChangeText={setPhone}
+            editable={!loading}
           />
           <Text style={styles.label}>Password</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="••••••••"
-            secureTextEntry
-            inputAccessoryViewID={accessory}
-            returnKeyType="done"
+          <TextInput 
+            style={styles.input} 
+            placeholder="••••••••" 
+            secureTextEntry 
+            value={password}
+            onChangeText={setPassword}
+            editable={!loading}
           />
           <Text style={styles.label}>Confirm Password</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="••••••••"
-            secureTextEntry
-            inputAccessoryViewID={accessory}
-            returnKeyType="done"
-          />
-          <Text style={styles.label}>Verification Code</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Enter verification code"
-            keyboardType="number-pad"
-            inputAccessoryViewID={accessory}
-            returnKeyType="done"
+          <TextInput 
+            style={styles.input} 
+            placeholder="••••••••" 
+            secureTextEntry 
+            value={confirmPassword}
+            onChangeText={setConfirmPassword}
+            editable={!loading}
           />
           <Pressable style={styles.primaryBtn} onPress={submit} disabled={loading}>
             <Text style={styles.primaryBtnText}>{loading ? 'Creating account...' : 'Create Account'}</Text>
           </Pressable>
         </View>
-      )}
-
-      {isIOS && (
-        <InputAccessoryView nativeID={accessoryId}>
-          <View style={styles.accessory}>
-            <Pressable style={styles.doneBtn} onPress={() => Keyboard.dismiss()}>
-              <Text style={styles.doneText}>Done</Text>
-            </Pressable>
-          </View>
-        </InputAccessoryView>
       )}
     </SafeAreaView>
   );
@@ -140,7 +224,4 @@ const styles = StyleSheet.create({
   link: {color: '#4f46e5', marginVertical: 10},
   primaryBtn: {backgroundColor: '#4f46e5', borderRadius: 10, height: 48, alignItems: 'center', justifyContent: 'center', marginTop: 8},
   primaryBtnText: {color: 'white', fontWeight: '600'},
-  accessory: {backgroundColor: '#f9fafb', paddingHorizontal: 16, paddingVertical: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#d1d5db', alignItems: 'flex-end'},
-  doneBtn: {paddingHorizontal: 12, paddingVertical: 6, backgroundColor: '#4f46e5', borderRadius: 8},
-  doneText: {color: 'white', fontWeight: '600'},
 });

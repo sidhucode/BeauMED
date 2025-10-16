@@ -1,6 +1,7 @@
-import React from 'react';
+import React, {useEffect} from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { ActivityIndicator, View } from 'react-native';
+import { ActivityIndicator, View, useColorScheme } from 'react-native';
+import { Amplify } from 'aws-amplify';
 import { RouterProvider, useRouter } from './src/navigation/SimpleRouter';
 import { NotificationsProvider } from './src/state/NotificationsContext';
 import { MedicationsProvider } from './src/state/MedicationsContext';
@@ -8,6 +9,10 @@ import { ProfileProvider } from './src/state/ProfileContext';
 import { ThemeProvider, useTheme } from './src/state/ThemeContext';
 import { Dashboard, Auth, Onboarding, Doctors, Medications, Assistant, Profile, ProfileEdit, Symptoms, NotFound, Index, Notifications, MedicationForm } from './src/screens';
 import BottomNav from './src/components/BottomNav';
+import awsConfig from './aws-exports';
+
+// Initialize Amplify with AWS configuration
+Amplify.configure(awsConfig);
 
 function Shell() {
   const {route} = useRouter();
