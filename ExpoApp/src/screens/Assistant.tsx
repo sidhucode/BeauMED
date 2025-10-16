@@ -74,9 +74,8 @@ const styles = StyleSheet.create({
   assistant: {backgroundColor: '#eef2ff'},
   user: {backgroundColor: '#4f46e5'},
   message: {color: '#111827', fontSize: 14},
-  inputBar: {flexDirection: 'row', alignItems: 'center', gap: 8, padding: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#e5e7eb', backgroundColor: 'white'},
+  inputBar: {flexDirection: 'row', alignItems: 'center', gap: 8, padding: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#e5e7eb', backgroundColor: 'white', marginBottom: 70},
   iconBtn: {height: 40, width: 40, borderRadius: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: '#f3f4f6'},
   sendBtn: {height: 40, width: 40, borderRadius: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: '#4f46e5'},
   input: {flex: 1, height: 40, borderRadius: 10, borderWidth: 1, borderColor: '#e5e7eb', paddingHorizontal: 10, backgroundColor: 'white'},
 });
-

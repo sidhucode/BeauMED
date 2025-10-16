@@ -9,8 +9,11 @@ export type RouteName =
   | 'Auth'
   | 'Onboarding'
   | 'Profile'
+  | 'ProfileEdit'
   | 'Symptoms'
-  | 'NotFound';
+  | 'NotFound'
+  | 'Notifications'
+  | 'MedicationForm';
 
 type RouterContextValue = {
   route: RouteName;
@@ -53,4 +56,3 @@ export function useRouter() {
   if (!ctx) throw new Error('useRouter must be used within RouterProvider');
   return ctx;
 }
-

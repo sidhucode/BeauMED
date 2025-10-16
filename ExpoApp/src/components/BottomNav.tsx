@@ -1,6 +1,7 @@
-import React from 'react';
+import React, {useMemo} from 'react';
 import {View, Text, Pressable, StyleSheet} from 'react-native';
 import {RouteName, useRouter} from '../navigation/SimpleRouter';
+import {useTheme} from '../state/ThemeContext';
 
 type Tab = { key: RouteName; label: string; emoji: string };
 
@@ -13,8 +14,21 @@ const tabs: Tab[] = [
 
 export default function BottomNav() {
   const {route, navigate} = useRouter();
+  const {colors} = useTheme();
+  const themedStyles = useMemo(
+    () => ({
+      container: [
+        styles.container,
+        {backgroundColor: colors.navBackground, borderTopColor: colors.navBorder},
+      ],
+      label: {color: colors.muted},
+      active: {color: colors.text},
+    }),
+    [colors],
+  );
+
   return (
-    <View style={styles.container}>
+    <View style={themedStyles.container}>
       {tabs.map(t => {
         const active = route === t.key;
         return (
@@ -23,8 +37,8 @@ export default function BottomNav() {
             onPress={() => navigate(t.key)}
             style={styles.item}
           >
-            <Text style={[styles.emoji, active && styles.active]}>{t.emoji}</Text>
-            <Text style={[styles.label, active && styles.active]}>{t.label}</Text>
+            <Text style={[styles.emoji, themedStyles.label, active && themedStyles.active]}>{t.emoji}</Text>
+            <Text style={[styles.label, themedStyles.label, active && themedStyles.active]}>{t.label}</Text>
           </Pressable>
         );
       })}
@@ -51,16 +65,12 @@ const styles = StyleSheet.create({
   },
   emoji: {
     fontSize: 16,
-    color: '#666',
   },
   label: {
     fontSize: 12,
-    color: '#666',
     marginTop: 2,
   },
   active: {
-    color: '#111',
     fontWeight: '600',
   },
 });
-

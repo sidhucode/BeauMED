@@ -9,3 +9,6 @@ export { default as Profile } from './Profile';
 export { default as Symptoms } from './Symptoms';
 export { default as NotFound } from './NotFound';
 export { default as Index } from './Index';
+export { default as Notifications } from './Notifications';
+export { default as MedicationForm } from './MedicationForm';
+export { default as ProfileEdit } from './ProfileEdit';

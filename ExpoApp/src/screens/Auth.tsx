@@ -1,11 +1,14 @@
 import React, {useState} from 'react';
-import {SafeAreaView, View, Text, StyleSheet, TextInput, Pressable} from 'react-native';
+import {SafeAreaView, View, Text, StyleSheet, TextInput, Pressable, Keyboard, InputAccessoryView, Platform} from 'react-native';
 import {useRouter} from '../navigation/SimpleRouter';
 
 export default function AuthScreen() {
   const {navigate} = useRouter();
   const [tab, setTab] = useState<'login'|'signup'>('login');
   const [loading, setLoading] = useState(false);
+  const accessoryId = 'auth-input-accessory';
+  const isIOS = Platform.OS === 'ios';
+  const accessory = isIOS ? accessoryId : undefined;
 
   const submit = () => {
     setLoading(true);
@@ -35,9 +38,22 @@ export default function AuthScreen() {
       {tab === 'login' ? (
         <View style={styles.form}> 
           <Text style={styles.label}>Email</Text>
-          <TextInput style={styles.input} placeholder="you@example.com" keyboardType="email-address" autoCapitalize="none" />
+          <TextInput
+            style={styles.input}
+            placeholder="you@example.com"
+            keyboardType="email-address"
+            autoCapitalize="none"
+            inputAccessoryViewID={accessory}
+            returnKeyType="done"
+          />
           <Text style={styles.label}>Password</Text>
-          <TextInput style={styles.input} placeholder="••••••••" secureTextEntry />
+          <TextInput
+            style={styles.input}
+            placeholder="••••••••"
+            secureTextEntry
+            inputAccessoryViewID={accessory}
+            returnKeyType="done"
+          />
           <Pressable>
             <Text style={styles.link}>Forgot password?</Text>
           </Pressable>
@@ -48,17 +64,59 @@ export default function AuthScreen() {
       ) : (
         <View style={styles.form}>
           <Text style={styles.label}>Full Name</Text>
-          <TextInput style={styles.input} placeholder="John Doe" />
+          <TextInput
+            style={styles.input}
+            placeholder="John Doe"
+            inputAccessoryViewID={accessory}
+            returnKeyType="done"
+          />
           <Text style={styles.label}>Email</Text>
-          <TextInput style={styles.input} placeholder="you@example.com" keyboardType="email-address" autoCapitalize="none" />
+          <TextInput
+            style={styles.input}
+            placeholder="you@example.com"
+            keyboardType="email-address"
+            autoCapitalize="none"
+            inputAccessoryViewID={accessory}
+            returnKeyType="done"
+          />
           <Text style={styles.label}>Password</Text>
-          <TextInput style={styles.input} placeholder="••••••••" secureTextEntry />
+          <TextInput
+            style={styles.input}
+            placeholder="••••••••"
+            secureTextEntry
+            inputAccessoryViewID={accessory}
+            returnKeyType="done"
+          />
           <Text style={styles.label}>Confirm Password</Text>
-          <TextInput style={styles.input} placeholder="••••••••" secureTextEntry />
+          <TextInput
+            style={styles.input}
+            placeholder="••••••••"
+            secureTextEntry
+            inputAccessoryViewID={accessory}
+            returnKeyType="done"
+          />
+          <Text style={styles.label}>Verification Code</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Enter verification code"
+            keyboardType="number-pad"
+            inputAccessoryViewID={accessory}
+            returnKeyType="done"
+          />
           <Pressable style={styles.primaryBtn} onPress={submit} disabled={loading}>
             <Text style={styles.primaryBtnText}>{loading ? 'Creating account...' : 'Create Account'}</Text>
           </Pressable>
         </View>
+      )}
+
+      {isIOS && (
+        <InputAccessoryView nativeID={accessoryId}>
+          <View style={styles.accessory}>
+            <Pressable style={styles.doneBtn} onPress={() => Keyboard.dismiss()}>
+              <Text style={styles.doneText}>Done</Text>
+            </Pressable>
+          </View>
+        </InputAccessoryView>
       )}
     </SafeAreaView>
   );
@@ -82,5 +140,7 @@ const styles = StyleSheet.create({
   link: {color: '#4f46e5', marginVertical: 10},
   primaryBtn: {backgroundColor: '#4f46e5', borderRadius: 10, height: 48, alignItems: 'center', justifyContent: 'center', marginTop: 8},
   primaryBtnText: {color: 'white', fontWeight: '600'},
+  accessory: {backgroundColor: '#f9fafb', paddingHorizontal: 16, paddingVertical: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#d1d5db', alignItems: 'flex-end'},
+  doneBtn: {paddingHorizontal: 12, paddingVertical: 6, backgroundColor: '#4f46e5', borderRadius: 8},
+  doneText: {color: 'white', fontWeight: '600'},
 });
-
