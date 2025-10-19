@@ -1,7 +1,20 @@
-import React, {useMemo, useRef, useState, useEffect} from 'react';
-import {SafeAreaView, View, Text, StyleSheet, TextInput, Pressable, Alert, ScrollView, Modal, ScrollView as RNScrollView} from 'react-native';
+import React, {useEffect, useMemo, useRef, useState} from 'react';
+import {
+  SafeAreaView,
+  View,
+  Text,
+  StyleSheet,
+  TextInput,
+  Pressable,
+  Alert,
+  ScrollView,
+  Modal,
+  ScrollView as RNScrollView,
+  Switch,
+} from 'react-native';
 import {useRouter} from '../navigation/SimpleRouter';
 import {useMedications} from '../state/MedicationsContext';
+import {useTheme, ThemeColors} from '../state/ThemeContext';
 
 const ITEM_HEIGHT = 40;
 const PADDING_COUNT = 2;
@@ -17,6 +30,8 @@ type Params = {
 export default function MedicationFormScreen() {
   const {goBack, params} = useRouter();
   const {items, addMedication, updateMedication} = useMedications();
+  const {colors} = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
 
   const formParams = (params as Params) ?? {mode: 'add'};
   const existing = useMemo(() => items.find(item => item.id === formParams.id), [items, formParams.id]);
@@ -32,8 +47,14 @@ export default function MedicationFormScreen() {
   const minutes = useMemo(() => Array.from({length: 60}, (_, i) => i.toString().padStart(2, '0')), []);
   const periods = useMemo(() => ['AM', 'PM'], []);
   const paddedHours = useMemo(() => Array(PADDING_COUNT).fill('').concat(hours, Array(PADDING_COUNT).fill('')), [hours]);
-  const paddedMinutes = useMemo(() => Array(PADDING_COUNT).fill('').concat(minutes, Array(PADDING_COUNT).fill('')), [minutes]);
-  const paddedPeriods = useMemo(() => Array(PADDING_COUNT).fill('').concat(periods, Array(PADDING_COUNT).fill('')), [periods]);
+  const paddedMinutes = useMemo(
+    () => Array(PADDING_COUNT).fill('').concat(minutes, Array(PADDING_COUNT).fill('')),
+    [minutes],
+  );
+  const paddedPeriods = useMemo(
+    () => Array(PADDING_COUNT).fill('').concat(periods, Array(PADDING_COUNT).fill('')),
+    [periods],
+  );
 
   const [hourIndex, setHourIndex] = useState(7);
   const [minuteIndex, setMinuteIndex] = useState(0);
@@ -104,34 +125,57 @@ export default function MedicationFormScreen() {
     setTimePickerVisible(false);
   };
 
-  const updateIndexFromOffset = (offset: number, dataLength: number, current: number, setIndex: (val: number) => void) => {
+  const updateIndexFromOffset = (
+    offset: number,
+    dataLength: number,
+    current: number,
+    setIndex: (value: number) => void,
+  ) => {
     const rawIndex = Math.round(offset / ITEM_HEIGHT);
     let derived = rawIndex - PADDING_COUNT;
     if (derived < 0) derived = 0;
     if (derived > dataLength - 1) derived = dataLength - 1;
-    if (derived !== current) {
-      setIndex(derived);
-    }
+    if (derived !== current) setIndex(derived);
   };
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>{formParams.mode === 'edit' ? 'Edit Medication' : 'Add Medication'}</Text>
-        <Pressable onPress={goBack}><Text style={styles.close}>Close ✕</Text></Pressable>
+        <Pressable onPress={goBack}>
+          <Text style={styles.close}>Close ✕</Text>
+        </Pressable>
       </View>
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.field}>
           <Text style={styles.label}>Medication Name</Text>
-          <TextInput style={styles.input} value={name} onChangeText={setName} placeholder="e.g., Metformin" />
+          <TextInput
+            style={styles.input}
+            value={name}
+            onChangeText={setName}
+            placeholder="e.g., Metformin"
+            placeholderTextColor={colors.muted}
+          />
         </View>
         <View style={styles.field}>
           <Text style={styles.label}>Dosage</Text>
-          <TextInput style={styles.input} value={dosage} onChangeText={setDosage} placeholder="e.g., 500mg" />
+          <TextInput
+            style={styles.input}
+            value={dosage}
+            onChangeText={setDosage}
+            placeholder="e.g., 500mg"
+            placeholderTextColor={colors.muted}
+          />
         </View>
         <View style={styles.field}>
           <Text style={styles.label}>Frequency</Text>
-          <TextInput style={styles.input} value={frequency} onChangeText={setFrequency} placeholder="e.g., Twice daily" />
+          <TextInput
+            style={styles.input}
+            value={frequency}
+            onChangeText={setFrequency}
+            placeholder="e.g., Twice daily"
+            placeholderTextColor={colors.muted}
+          />
         </View>
         <View style={styles.field}>
           <Text style={styles.label}>Next Dose (time)</Text>
@@ -141,14 +185,14 @@ export default function MedicationFormScreen() {
             </Text>
           </Pressable>
         </View>
-        <View style={styles.reminderRow}>
+        <View style={[styles.field, styles.reminderRow]}>
           <Text style={styles.label}>Reminder</Text>
-          <Pressable
-            style={[styles.reminderToggle, reminder ? styles.toggleOn : styles.toggleOff]}
-            onPress={() => setReminder(r => !r)}
-          >
-            <Text style={reminder ? styles.toggleText : styles.toggleTextOff}>{reminder ? 'On' : 'Off'}</Text>
-          </Pressable>
+          <Switch
+            value={reminder}
+            onValueChange={setReminder}
+            trackColor={{false: '#d1d5db', true: colors.primary}}
+            thumbColor={reminder ? colors.primaryText : '#ffffff'}
+          />
         </View>
       </ScrollView>
       <View style={styles.footer}>
@@ -162,9 +206,13 @@ export default function MedicationFormScreen() {
           <Pressable style={{flex: 1}} onPress={closeTimePicker} />
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Pressable onPress={closeTimePicker}><Text style={styles.modalAction}>Cancel</Text></Pressable>
+              <Pressable onPress={closeTimePicker}>
+                <Text style={styles.modalAction}>Cancel</Text>
+              </Pressable>
               <Text style={styles.modalTitle}>Select Time</Text>
-              <Pressable onPress={applyTime}><Text style={styles.modalAction}>Save</Text></Pressable>
+              <Pressable onPress={applyTime}>
+                <Text style={styles.modalAction}>Save</Text>
+              </Pressable>
             </View>
             <View style={styles.wheelContainer}>
               <View style={styles.wheelHighlight} pointerEvents="none" />
@@ -174,13 +222,22 @@ export default function MedicationFormScreen() {
                   showsVerticalScrollIndicator={false}
                   snapToInterval={ITEM_HEIGHT}
                   decelerationRate="fast"
-                  onMomentumScrollEnd={e => updateIndexFromOffset(e.nativeEvent.contentOffset.y, hours.length, hourIndex, setHourIndex)}
-                  onScroll={e => updateIndexFromOffset(e.nativeEvent.contentOffset.y, hours.length, hourIndex, setHourIndex)}
+                  onMomentumScrollEnd={event =>
+                    updateIndexFromOffset(event.nativeEvent.contentOffset.y, hours.length, hourIndex, setHourIndex)
+                  }
+                  onScroll={event =>
+                    updateIndexFromOffset(event.nativeEvent.contentOffset.y, hours.length, hourIndex, setHourIndex)
+                  }
                   scrollEventThrottle={16}
                 >
-                  {paddedHours.map((val, idx) => (
-                    <View key={`hour-${idx}`} style={[styles.wheelItem, (idx - PADDING_COUNT) === hourIndex && styles.wheelItemActive]}>
-                      <Text style={(idx - PADDING_COUNT) === hourIndex ? styles.wheelTextActive : styles.wheelText}>{val}</Text>
+                  {paddedHours.map((value, idx) => (
+                    <View
+                      key={`hour-${idx}`}
+                      style={[styles.wheelItem, idx - PADDING_COUNT === hourIndex && styles.wheelItemActive]}
+                    >
+                      <Text style={idx - PADDING_COUNT === hourIndex ? styles.wheelTextActive : styles.wheelText}>
+                        {value}
+                      </Text>
                     </View>
                   ))}
                 </RNScrollView>
@@ -191,13 +248,22 @@ export default function MedicationFormScreen() {
                   showsVerticalScrollIndicator={false}
                   snapToInterval={ITEM_HEIGHT}
                   decelerationRate="fast"
-                  onMomentumScrollEnd={e => updateIndexFromOffset(e.nativeEvent.contentOffset.y, minutes.length, minuteIndex, setMinuteIndex)}
-                  onScroll={e => updateIndexFromOffset(e.nativeEvent.contentOffset.y, minutes.length, minuteIndex, setMinuteIndex)}
+                  onMomentumScrollEnd={event =>
+                    updateIndexFromOffset(event.nativeEvent.contentOffset.y, minutes.length, minuteIndex, setMinuteIndex)
+                  }
+                  onScroll={event =>
+                    updateIndexFromOffset(event.nativeEvent.contentOffset.y, minutes.length, minuteIndex, setMinuteIndex)
+                  }
                   scrollEventThrottle={16}
                 >
-                  {paddedMinutes.map((val, idx) => (
-                    <View key={`minute-${idx}`} style={[styles.wheelItem, (idx - PADDING_COUNT) === minuteIndex && styles.wheelItemActive]}>
-                      <Text style={(idx - PADDING_COUNT) === minuteIndex ? styles.wheelTextActive : styles.wheelText}>{val}</Text>
+                  {paddedMinutes.map((value, idx) => (
+                    <View
+                      key={`minute-${idx}`}
+                      style={[styles.wheelItem, idx - PADDING_COUNT === minuteIndex && styles.wheelItemActive]}
+                    >
+                      <Text style={idx - PADDING_COUNT === minuteIndex ? styles.wheelTextActive : styles.wheelText}>
+                        {value}
+                      </Text>
                     </View>
                   ))}
                 </RNScrollView>
@@ -208,13 +274,22 @@ export default function MedicationFormScreen() {
                   showsVerticalScrollIndicator={false}
                   snapToInterval={ITEM_HEIGHT}
                   decelerationRate="fast"
-                  onMomentumScrollEnd={e => updateIndexFromOffset(e.nativeEvent.contentOffset.y, periods.length, periodIndex, setPeriodIndex)}
-                  onScroll={e => updateIndexFromOffset(e.nativeEvent.contentOffset.y, periods.length, periodIndex, setPeriodIndex)}
+                  onMomentumScrollEnd={event =>
+                    updateIndexFromOffset(event.nativeEvent.contentOffset.y, periods.length, periodIndex, setPeriodIndex)
+                  }
+                  onScroll={event =>
+                    updateIndexFromOffset(event.nativeEvent.contentOffset.y, periods.length, periodIndex, setPeriodIndex)
+                  }
                   scrollEventThrottle={16}
                 >
-                  {paddedPeriods.map((val, idx) => (
-                    <View key={`period-${idx}`} style={[styles.wheelItem, (idx - PADDING_COUNT) === periodIndex && styles.wheelItemActive]}>
-                      <Text style={(idx - PADDING_COUNT) === periodIndex ? styles.wheelTextActive : styles.wheelText}>{val}</Text>
+                  {paddedPeriods.map((value, idx) => (
+                    <View
+                      key={`period-${idx}`}
+                      style={[styles.wheelItem, idx - PADDING_COUNT === periodIndex && styles.wheelItemActive]}
+                    >
+                      <Text style={idx - PADDING_COUNT === periodIndex ? styles.wheelTextActive : styles.wheelText}>
+                        {value}
+                      </Text>
                     </View>
                   ))}
                 </RNScrollView>
@@ -227,37 +302,76 @@ export default function MedicationFormScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {flex: 1, backgroundColor: '#f7f7fb'},
-  header: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#4f46e5', paddingHorizontal: 16, paddingVertical: 12},
-  headerTitle: {color: 'white', fontSize: 18, fontWeight: '700'},
-  close: {color: 'white', fontWeight: '600'},
-  content: {padding: 16, gap: 16},
-  field: {gap: 6},
-  label: {color: '#374151', fontWeight: '600'},
-  input: {height: 44, borderRadius: 10, paddingHorizontal: 12, backgroundColor: 'white', borderWidth: 1, borderColor: '#e5e7eb'},
-  timeInput: {justifyContent: 'center'},
-  inputText: {color: '#111827', fontSize: 16},
-  placeholderText: {color: '#9ca3af', fontSize: 16},
-  reminderRow: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 4},
-  reminderToggle: {width: 80, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center'},
-  toggleOn: {backgroundColor: '#4f46e5'},
-  toggleOff: {backgroundColor: '#e5e7eb'},
-  toggleText: {color: 'white', fontWeight: '600'},
-  toggleTextOff: {color: '#374151', fontWeight: '600'},
-  footer: {padding: 16},
-  primaryBtn: {height: 48, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: '#4f46e5'},
-  primaryText: {color: 'white', fontWeight: '700', fontSize: 16},
-  modalBackdrop: {flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.3)'},
-  modalContent: {backgroundColor: 'white', borderTopLeftRadius: 16, borderTopRightRadius: 16, paddingBottom: 16},
-  modalHeader: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12},
-  modalTitle: {color: '#111827', fontSize: 16, fontWeight: '700'},
-  modalAction: {color: '#4f46e5', fontWeight: '600'},
-  wheelContainer: {flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 16, marginBottom: 16, position: 'relative', height: WHEEL_HEIGHT},
-  wheelHighlight: {position: 'absolute', left: 16, right: 16, top: HIGHLIGHT_OFFSET, height: ITEM_HEIGHT, borderRadius: 10, backgroundColor: '#eef2ff', opacity: 0.6},
-  wheelColumn: {flex: 1, marginHorizontal: 4, overflow: 'hidden'},
-  wheelItem: {height: ITEM_HEIGHT, alignItems: 'center', justifyContent: 'center'},
-  wheelItemActive: {},
-  wheelText: {color: '#94a3b8', fontSize: 18},
-  wheelTextActive: {color: '#1f2937', fontSize: 20, fontWeight: '700'},
-});
+const createStyles = (colors: ThemeColors) =>
+  StyleSheet.create({
+    container: {flex: 1, backgroundColor: colors.background},
+    header: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      backgroundColor: colors.headerBackground,
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+    },
+    headerTitle: {color: colors.headerText, fontSize: 18, fontWeight: '700'},
+    close: {color: colors.headerText, fontWeight: '600'},
+    content: {padding: 16, gap: 16},
+    field: {gap: 6},
+    label: {color: colors.muted, fontWeight: '600'},
+    input: {
+      height: 44,
+      borderRadius: 10,
+      paddingHorizontal: 12,
+      backgroundColor: colors.inputBackground,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.border,
+      color: colors.inputText,
+    },
+    timeInput: {justifyContent: 'center'},
+    inputText: {color: colors.inputText, fontSize: 16},
+    placeholderText: {color: colors.muted, fontSize: 16},
+    reminderRow: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 4},
+    footer: {padding: 16},
+    primaryBtn: {
+      height: 48,
+      borderRadius: 10,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: colors.primary,
+    },
+    primaryText: {color: colors.primaryText, fontWeight: '700', fontSize: 16},
+    modalBackdrop: {flex: 1, justifyContent: 'flex-end', backgroundColor: colors.overlay},
+    modalContent: {backgroundColor: colors.card, borderTopLeftRadius: 16, borderTopRightRadius: 16, paddingBottom: 16},
+    modalHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+    },
+    modalTitle: {color: colors.text, fontSize: 16, fontWeight: '700'},
+    modalAction: {color: colors.primary, fontWeight: '600'},
+    wheelContainer: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      paddingHorizontal: 16,
+      marginBottom: 16,
+      position: 'relative',
+      height: WHEEL_HEIGHT,
+    },
+    wheelHighlight: {
+      position: 'absolute',
+      left: 16,
+      right: 16,
+      top: HIGHLIGHT_OFFSET,
+      height: ITEM_HEIGHT,
+      borderRadius: 10,
+      backgroundColor: colors.accent,
+      opacity: 0.7,
+    },
+    wheelColumn: {flex: 1, marginHorizontal: 4, overflow: 'hidden'},
+    wheelItem: {height: ITEM_HEIGHT, alignItems: 'center', justifyContent: 'center'},
+    wheelItemActive: {},
+    wheelText: {color: colors.muted, fontSize: 18},
+    wheelTextActive: {color: colors.text, fontSize: 20, fontWeight: '700'},
+  });

@@ -172,7 +172,7 @@ export default function DashboardScreen() {
         </View>
 
         <Pressable style={styles.fab} onPress={() => {}}>
-          <Text style={styles.fabText}>＋</Text>
+          <Text style={styles.fabText}>Connect</Text>
         </Pressable>
       </ScrollView>
     </SafeAreaView>
@@ -263,14 +263,13 @@ const createStyles = (colors: ThemeColors, theme: ThemeName) =>
       position: 'absolute',
       right: 20,
       bottom: 90,
-      width: 56,
-      height: 56,
-      borderRadius: 28,
+      borderRadius: 24,
+      paddingHorizontal: 18,
+      paddingVertical: 10,
       backgroundColor: colors.fabBackground,
       alignItems: 'center',
       justifyContent: 'center',
       elevation: 4,
     },
-    fabText: {color: colors.fabText, fontSize: 24, lineHeight: 24},
+    fabText: {color: colors.fabText, fontSize: 16, fontWeight: '600'},
   });
-
