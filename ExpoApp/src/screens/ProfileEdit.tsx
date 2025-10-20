@@ -1,12 +1,12 @@
 import React, {useMemo, useState} from 'react';
-import {SafeAreaView, View, Text, StyleSheet, TextInput, Pressable, Alert, ScrollView, KeyboardAvoidingView, Platform} from 'react-native';
+import {SafeAreaView, View, Text, StyleSheet, TextInput, Pressable, Alert, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator} from 'react-native';
 import {useRouter} from '../navigation/SimpleRouter';
 import {useProfile} from '../state/ProfileContext';
 import {useTheme, ThemeColors} from '../state/ThemeContext';
 
 export default function ProfileEditScreen() {
   const {goBack} = useRouter();
-  const {profile, updateProfile} = useProfile();
+  const {profile, saveProfile} = useProfile();
   const {colors} = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
 
@@ -16,8 +16,9 @@ export default function ProfileEditScreen() {
   const [caregiverName, setCaregiverName] = useState(profile.caregiverName);
   const [caregiverPhone, setCaregiverPhone] = useState(profile.caregiverPhone);
   const [caregiverEmail, setCaregiverEmail] = useState(profile.caregiverEmail);
+  const [loading, setLoading] = useState(false);
 
-  const save = () => {
+  const save = async () => {
     if (!name.trim()) {
       Alert.alert('Name required', 'Please enter your full name.');
       return;
@@ -26,22 +27,32 @@ export default function ProfileEditScreen() {
       Alert.alert('Age required', 'Please enter your age.');
       return;
     }
-    updateProfile({
-      name: name.trim(),
-      age: age.trim(),
-      conditions: conditions.trim(),
-      caregiverName: caregiverName.trim(),
-      caregiverPhone: caregiverPhone.trim(),
-      caregiverEmail: caregiverEmail.trim(),
-    });
-    goBack();
+
+    setLoading(true);
+    try {
+      await saveProfile({
+        name: name.trim(),
+        age: age.trim(),
+        conditions: conditions.trim(),
+        caregiverName: caregiverName.trim(),
+        caregiverPhone: caregiverPhone.trim(),
+        caregiverEmail: caregiverEmail.trim(),
+      });
+      Alert.alert('Success', 'Profile updated successfully!');
+      goBack();
+    } catch (error: any) {
+      console.error('Failed to save profile:', error);
+      Alert.alert('Error', error.message || 'Failed to update profile. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Edit Personal Info</Text>
-        <Pressable onPress={goBack}><Text style={styles.close}>Close ?•</Text></Pressable>
+        <Pressable onPress={goBack}><Text style={styles.close}>Close ?ï¿½</Text></Pressable>
       </View>
       <KeyboardAvoidingView behavior={Platform.select({ios: 'padding', android: undefined})} style={{flex: 1}}>
         <ScrollView contentContainerStyle={styles.content}>
@@ -105,8 +116,12 @@ export default function ProfileEditScreen() {
         </ScrollView>
       </KeyboardAvoidingView>
       <View style={styles.footer}>
-        <Pressable style={styles.primaryBtn} onPress={save}>
-          <Text style={styles.primaryText}>Save Changes</Text>
+        <Pressable style={[styles.primaryBtn, loading && styles.disabledBtn]} onPress={save} disabled={loading}>
+          {loading ? (
+            <ActivityIndicator color={colors.primaryText} />
+          ) : (
+            <Text style={styles.primaryText}>Save Changes</Text>
+          )}
         </Pressable>
       </View>
     </SafeAreaView>
@@ -127,4 +142,5 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   footer: {padding: 16},
   primaryBtn: {height: 48, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primary},
   primaryText: {color: colors.primaryText, fontWeight: '700', fontSize: 16},
+  disabledBtn: {opacity: 0.6},
 });

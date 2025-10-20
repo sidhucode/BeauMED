@@ -24,7 +24,7 @@ const HIGHLIGHT_OFFSET = (WHEEL_HEIGHT - ITEM_HEIGHT) / 2;
 
 type Params = {
   mode: 'add' | 'edit';
-  id?: number;
+  medicationId?: string;
 };
 
 export default function MedicationFormScreen() {
@@ -34,13 +34,15 @@ export default function MedicationFormScreen() {
   const styles = useMemo(() => createStyles(colors), [colors]);
 
   const formParams = (params as Params) ?? {mode: 'add'};
-  const existing = useMemo(() => items.find(item => item.id === formParams.id), [items, formParams.id]);
+  const existing = useMemo(() => items.find(item => item.medicationId === formParams.medicationId), [items, formParams.medicationId]);
 
   const [name, setName] = useState(existing?.name ?? '');
   const [dosage, setDosage] = useState(existing?.dosage ?? '');
   const [frequency, setFrequency] = useState(existing?.frequency ?? '');
-  const [nextDose, setNextDose] = useState(existing?.nextDose ?? '');
-  const [reminder, setReminder] = useState(existing?.reminder ?? true);
+  const [reminders, setReminders] = useState<string[]>(existing?.reminders ?? []);
+  const [notes, setNotes] = useState(existing?.notes ?? '');
+  const [active, setActive] = useState(existing?.active ?? true);
+  const [currentReminderTime, setCurrentReminderTime] = useState('');
   const [timePickerVisible, setTimePickerVisible] = useState(false);
 
   const hours = useMemo(() => Array.from({length: 12}, (_, i) => (i + 1).toString()), []);
@@ -64,46 +66,54 @@ export default function MedicationFormScreen() {
   const minuteRef = useRef<RNScrollView>(null);
   const periodRef = useRef<RNScrollView>(null);
 
-  const save = () => {
-    if (!name.trim() || !dosage.trim() || !frequency.trim() || !nextDose.trim()) {
-      Alert.alert('Missing info', 'Please fill all fields before saving.');
+  const save = async () => {
+    if (!name.trim() || !dosage.trim() || !frequency.trim()) {
+      Alert.alert('Missing info', 'Please fill in medication name, dosage, and frequency.');
       return;
     }
-    if (formParams.mode === 'edit' && existing) {
-      updateMedication(existing.id, {
+
+    try {
+      const medicationData = {
         name: name.trim(),
         dosage: dosage.trim(),
         frequency: frequency.trim(),
-        nextDose: nextDose.trim(),
-        reminder,
-      });
-    } else {
-      addMedication({
-        name: name.trim(),
-        dosage: dosage.trim(),
-        frequency: frequency.trim(),
-        nextDose: nextDose.trim(),
-        reminder,
-      });
+        reminders,
+        notes: notes.trim(),
+        active,
+      };
+
+      if (formParams.mode === 'edit' && existing) {
+        await updateMedication(existing.medicationId, medicationData);
+        Alert.alert('Success', 'Medication updated successfully');
+      } else {
+        await addMedication(medicationData);
+        Alert.alert('Success', 'Medication added successfully');
+      }
+      goBack();
+    } catch (error: any) {
+      console.error('Save medication error:', error);
+      Alert.alert('Error', error.message || 'Failed to save medication');
     }
-    goBack();
   };
 
   const openTimePicker = () => {
-    const match = nextDose.match(/^\s*(\d{1,2}):(\d{2})\s*(AM|PM)\s*$/i);
-    if (match) {
-      const [, hStr, mStr, period] = match;
-      const hourVal = Math.min(Math.max(parseInt(hStr, 10), 1), 12);
-      const minuteVal = Math.min(Math.max(parseInt(mStr, 10), 0), 59);
-      setHourIndex(hourVal - 1);
-      setMinuteIndex(minuteVal);
-      setPeriodIndex(period.toUpperCase() === 'PM' ? 1 : 0);
-    } else {
-      setHourIndex(7);
-      setMinuteIndex(0);
-      setPeriodIndex(0);
-    }
+    // Reset to default time (8:00 AM)
+    setHourIndex(7);
+    setMinuteIndex(0);
+    setPeriodIndex(0);
     setTimePickerVisible(true);
+  };
+
+  const addReminder = () => {
+    const timeString = `${hours[hourIndex]}:${minutes[minuteIndex]} ${periods[periodIndex]}`;
+    if (!reminders.includes(timeString)) {
+      setReminders([...reminders, timeString]);
+    }
+    setTimePickerVisible(false);
+  };
+
+  const removeReminder = (time: string) => {
+    setReminders(reminders.filter(t => t !== time));
   };
 
   useEffect(() => {
@@ -118,12 +128,6 @@ export default function MedicationFormScreen() {
   }, [timePickerVisible, hourIndex, minuteIndex, periodIndex]);
 
   const closeTimePicker = () => setTimePickerVisible(false);
-
-  const applyTime = () => {
-    const timeString = `${hours[hourIndex]}:${minutes[minuteIndex]} ${periods[periodIndex]}`;
-    setNextDose(timeString);
-    setTimePickerVisible(false);
-  };
 
   const updateIndexFromOffset = (
     offset: number,
@@ -178,20 +182,47 @@ export default function MedicationFormScreen() {
           />
         </View>
         <View style={styles.field}>
-          <Text style={styles.label}>Next Dose (time)</Text>
-          <Pressable style={[styles.input, styles.timeInput]} onPress={openTimePicker}>
-            <Text style={nextDose ? styles.inputText : styles.placeholderText}>
-              {nextDose || 'Select time'}
-            </Text>
-          </Pressable>
+          <View style={styles.fieldHeader}>
+            <Text style={styles.label}>Reminders</Text>
+            <Pressable onPress={openTimePicker}>
+              <Text style={styles.addReminderText}>+ Add Time</Text>
+            </Pressable>
+          </View>
+          {reminders.length > 0 ? (
+            <View style={styles.remindersList}>
+              {reminders.map((time, index) => (
+                <View key={index} style={styles.reminderChip}>
+                  <Text style={styles.reminderChipText}>{time}</Text>
+                  <Pressable onPress={() => removeReminder(time)}>
+                    <Text style={styles.reminderChipClose}>✕</Text>
+                  </Pressable>
+                </View>
+              ))}
+            </View>
+          ) : (
+            <Text style={styles.placeholderText}>No reminder times set</Text>
+          )}
+        </View>
+        <View style={styles.field}>
+          <Text style={styles.label}>Notes (Optional)</Text>
+          <TextInput
+            style={[styles.input, styles.notesInput]}
+            value={notes}
+            onChangeText={setNotes}
+            placeholder="e.g., Take with food"
+            placeholderTextColor={colors.muted}
+            multiline
+            numberOfLines={3}
+            textAlignVertical="top"
+          />
         </View>
         <View style={[styles.field, styles.reminderRow]}>
-          <Text style={styles.label}>Reminder</Text>
+          <Text style={styles.label}>Active Medication</Text>
           <Switch
-            value={reminder}
-            onValueChange={setReminder}
+            value={active}
+            onValueChange={setActive}
             trackColor={{false: '#d1d5db', true: colors.primary}}
-            thumbColor={reminder ? colors.primaryText : '#ffffff'}
+            thumbColor={active ? colors.primaryText : '#ffffff'}
           />
         </View>
       </ScrollView>
@@ -209,9 +240,9 @@ export default function MedicationFormScreen() {
               <Pressable onPress={closeTimePicker}>
                 <Text style={styles.modalAction}>Cancel</Text>
               </Pressable>
-              <Text style={styles.modalTitle}>Select Time</Text>
-              <Pressable onPress={applyTime}>
-                <Text style={styles.modalAction}>Save</Text>
+              <Text style={styles.modalTitle}>Add Reminder Time</Text>
+              <Pressable onPress={addReminder}>
+                <Text style={styles.modalAction}>Add</Text>
               </Pressable>
             </View>
             <View style={styles.wheelContainer}>
@@ -317,7 +348,9 @@ const createStyles = (colors: ThemeColors) =>
     close: {color: colors.headerText, fontWeight: '600'},
     content: {padding: 16, gap: 16},
     field: {gap: 6},
+    fieldHeader: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'},
     label: {color: colors.muted, fontWeight: '600'},
+    addReminderText: {color: colors.primary, fontWeight: '600', fontSize: 14},
     input: {
       height: 44,
       borderRadius: 10,
@@ -327,9 +360,25 @@ const createStyles = (colors: ThemeColors) =>
       borderColor: colors.border,
       color: colors.inputText,
     },
-    timeInput: {justifyContent: 'center'},
+    notesInput: {
+      height: 80,
+      paddingTop: 12,
+      paddingBottom: 12,
+    },
     inputText: {color: colors.inputText, fontSize: 16},
-    placeholderText: {color: colors.muted, fontSize: 16},
+    placeholderText: {color: colors.muted, fontSize: 14, marginTop: 8},
+    remindersList: {flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8},
+    reminderChip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      backgroundColor: colors.primary,
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 16,
+    },
+    reminderChipText: {color: colors.primaryText, fontSize: 14, fontWeight: '600'},
+    reminderChipClose: {color: colors.primaryText, fontSize: 16, fontWeight: '700'},
     reminderRow: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 4},
     footer: {padding: 16},
     primaryBtn: {

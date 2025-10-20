@@ -1,17 +1,121 @@
-import React, {useMemo} from 'react';
-import {SafeAreaView, View, Text, StyleSheet, Pressable, Switch, Alert, FlatList} from 'react-native';
+import React, {useMemo, useState} from 'react';
+import {SafeAreaView, View, Text, StyleSheet, Pressable, Switch, Alert, FlatList, ActivityIndicator} from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import {useRouter} from '../navigation/SimpleRouter';
 import {useMedications} from '../state/MedicationsContext';
 import {useTheme, ThemeColors} from '../state/ThemeContext';
+import {uploadPrescription} from '../utils/prescriptionUpload';
 
 export default function MedicationsScreen() {
   const {navigate} = useRouter();
-  const {items, removeMedication, toggleReminder} = useMedications();
+  const {items, loading, removeMedication, refreshMedications} = useMedications();
   const {colors} = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState('');
 
-  const scanPrescription = () => {
-    Alert.alert('Camera Access', 'This would open the camera to scan your prescription.');
+  const scanPrescription = async () => {
+    try {
+      // Request camera permissions
+      const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
+
+      if (permissionResult.granted === false) {
+        Alert.alert('Permission Required', 'Camera access is required to scan prescriptions.');
+        return;
+      }
+
+      // Launch camera
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        await handlePrescriptionUpload(result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error('Camera error:', error);
+      Alert.alert('Error', 'Failed to open camera. Please try again.');
+    }
+  };
+
+  const selectPrescriptionFromLibrary = async () => {
+    try {
+      // Request media library permissions
+      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+      if (permissionResult.granted === false) {
+        Alert.alert('Permission Required', 'Photo library access is required to select prescriptions.');
+        return;
+      }
+
+      // Launch image picker
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        await handlePrescriptionUpload(result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error('Image picker error:', error);
+      Alert.alert('Error', 'Failed to select image. Please try again.');
+    }
+  };
+
+  const handlePrescriptionUpload = async (imageUri: string) => {
+    setUploading(true);
+    try {
+      const result = await uploadPrescription(
+        imageUri,
+        `prescription-${Date.now()}.jpg`,
+        (stage) => setUploadProgress(stage)
+      );
+
+      Alert.alert(
+        'Success!',
+        `Found ${result.medications.length} medication(s) in your prescription. They have been added to your list.`,
+        [
+          {
+            text: 'OK',
+            onPress: () => refreshMedications(),
+          },
+        ]
+      );
+    } catch (error: any) {
+      console.error('Upload error:', error);
+      Alert.alert(
+        'Upload Failed',
+        error.message || 'Failed to analyze prescription. Please try again.'
+      );
+    } finally {
+      setUploading(false);
+      setUploadProgress('');
+    }
+  };
+
+  const showPrescriptionOptions = () => {
+    Alert.alert(
+      'Scan Prescription',
+      'Choose an option',
+      [
+        {
+          text: 'Take Photo',
+          onPress: scanPrescription,
+        },
+        {
+          text: 'Choose from Library',
+          onPress: selectPrescriptionFromLibrary,
+        },
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+      ]
+    );
   };
 
   return (
@@ -25,15 +129,26 @@ export default function MedicationsScreen() {
       <Text style={styles.headerSub}>Manage your prescriptions and reminders</Text>
 
       <View style={styles.scanWrap}>
-        <Pressable style={styles.outlineBtn} onPress={scanPrescription}>
-          <Text style={styles.outlineText}>📷 Scan Prescription</Text>
+        <Pressable
+          style={[styles.outlineBtn, uploading && styles.outlineBtnDisabled]}
+          onPress={showPrescriptionOptions}
+          disabled={uploading}
+        >
+          {uploading ? (
+            <View style={{flexDirection: 'row', alignItems: 'center', gap: 8}}>
+              <ActivityIndicator size="small" color={colors.primary} />
+              <Text style={styles.outlineText}>{uploadProgress}</Text>
+            </View>
+          ) : (
+            <Text style={styles.outlineText}>📷 Scan Prescription</Text>
+          )}
         </Pressable>
       </View>
 
       <FlatList
         contentContainerStyle={styles.listContent}
         data={items}
-        keyExtractor={item => String(item.id)}
+        keyExtractor={item => item.medicationId}
         renderItem={({item}) => (
           <View style={styles.card}>
             <View style={styles.rowBetween}>
@@ -48,26 +163,19 @@ export default function MedicationsScreen() {
                 </View>
               </View>
               <View style={styles.cardActions}>
-                <Pressable style={styles.iconBtn} onPress={() => navigate('MedicationForm', {mode: 'edit', id: item.id})}>
+                <Pressable style={styles.iconBtn} onPress={() => navigate('MedicationForm', {mode: 'edit', medicationId: item.medicationId})}>
                   <Text style={styles.iconText}>✏️</Text>
                 </Pressable>
-                <Pressable style={styles.iconBtn} onPress={() => removeMedication(item.id)}>
+                <Pressable style={styles.iconBtn} onPress={() => removeMedication(item.medicationId)}>
                   <Text style={styles.deleteText}>🗑️</Text>
                 </Pressable>
               </View>
             </View>
-            <View style={[styles.rowBetween, styles.topBorder]}>
-              <Text style={styles.muted}>⏰ Next: {item.nextDose}</Text>
-              <View style={styles.reminderRow}>
-                <Text style={styles.muted}>Reminder</Text>
-                <Switch
-                  value={item.reminder}
-                  onValueChange={value => toggleReminder(item.id, value)}
-                  trackColor={{false: '#d1d5db', true: colors.primary}}
-                  thumbColor={item.reminder ? colors.primaryText : '#ffffff'}
-                />
+            {item.reminders && item.reminders.length > 0 && (
+              <View style={[styles.rowBetween, styles.topBorder]}>
+                <Text style={styles.muted}>⏰ Reminders: {item.reminders.join(', ')}</Text>
               </View>
-            </View>
+            )}
           </View>
         )}
         ListFooterComponent={
@@ -112,6 +220,9 @@ const createStyles = (colors: ThemeColors) =>
       borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       backgroundColor: colors.card,
+    },
+    outlineBtnDisabled: {
+      opacity: 0.6,
     },
     outlineText: {color: colors.text, fontWeight: '600'},
     listContent: {paddingHorizontal: 16, paddingBottom: 120},

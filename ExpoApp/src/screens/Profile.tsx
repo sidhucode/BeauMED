@@ -3,13 +3,26 @@ import {SafeAreaView, View, Text, StyleSheet, TextInput, Switch, Pressable, Scro
 import {useRouter} from '../navigation/SimpleRouter';
 import {useProfile} from '../state/ProfileContext';
 import {useTheme, ThemeColors, ThemeName} from '../state/ThemeContext';
+import {signOut} from 'aws-amplify/auth';
 
 export default function ProfileScreen() {
   const {navigate} = useRouter();
-  const {profile} = useProfile();
+  const {profile, clearProfile} = useProfile();
   const {colors, theme, setTheme} = useTheme();
   const styles = useMemo(() => createStyles(colors, theme), [colors, theme]);
   const isDark = theme === 'dark';
+
+  const handleLogout = async () => {
+    try {
+      console.log('🚪 Logging out...');
+      await signOut();
+      clearProfile();
+      console.log('✅ Logout successful');
+      navigate('Auth');
+    } catch (error) {
+      console.error('❌ Logout failed:', error);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -81,7 +94,7 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-        <Pressable style={styles.dangerBtn} onPress={() => navigate('Auth')}>
+        <Pressable style={styles.dangerBtn} onPress={handleLogout}>
           <Text style={styles.dangerText}>⎋ Log Out</Text>
         </Pressable>
       </ScrollView>

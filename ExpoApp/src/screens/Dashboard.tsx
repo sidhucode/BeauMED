@@ -2,6 +2,7 @@ import React, {useCallback, useMemo} from 'react';
 import {SafeAreaView, ScrollView, View, Text, StyleSheet, Pressable, ActionSheetIOS, Platform, Alert} from 'react-native';
 import {useRouter} from '../navigation/SimpleRouter';
 import {useNotifications} from '../state/NotificationsContext';
+import {useProfile} from '../state/ProfileContext';
 import {useTheme, ThemeColors, ThemeName} from '../state/ThemeContext';
 
 const quickActions = [
@@ -20,6 +21,7 @@ const activityStats = [
 
 export default function DashboardScreen() {
   const {navigate} = useRouter();
+  const {profile} = useProfile();
   const {colors, theme} = useTheme();
   const styles = useMemo(() => createStyles(colors, theme), [colors, theme]);
   const {items, unreadCount, markAllRead, markRead, deleteItem, snooze} = useNotifications();
@@ -72,7 +74,7 @@ export default function DashboardScreen() {
         <View style={styles.header}>
           <View>
             <Text style={styles.headerSub}>Good Morning</Text>
-            <Text style={styles.headerTitle}>John Doe</Text>
+            <Text style={styles.headerTitle}>{profile.name || 'User'}</Text>
           </View>
           <Pressable
             onPress={() => navigate('Notifications')}

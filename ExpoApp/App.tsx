@@ -9,6 +9,7 @@ import { ProfileProvider } from './src/state/ProfileContext';
 import { ThemeProvider, useTheme } from './src/state/ThemeContext';
 import { Dashboard, Auth, Onboarding, Doctors, Medications, Assistant, Profile, ProfileEdit, Symptoms, NotFound, Index, Notifications, MedicationForm } from './src/screens';
 import BottomNav from './src/components/BottomNav';
+import DevServiceStatusBanner from './src/components/DevServiceStatusBanner';
 import awsConfig from './aws-exports';
 
 // Initialize Amplify with AWS configuration
@@ -30,6 +31,7 @@ function Shell() {
   return (
     <View style={{flex: 1, backgroundColor: colors.background}}>
       <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
+      <DevServiceStatusBanner />
       {route === 'Dashboard' && <Dashboard />}
       {route === 'Symptoms' && <Symptoms />}
       {route === 'Medications' && <Medications />}

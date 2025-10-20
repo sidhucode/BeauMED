@@ -1,58 +1,194 @@
-import React, {createContext, useCallback, useContext, useMemo, useState} from 'react';
+import React, {createContext, useCallback, useContext, useMemo, useState, useEffect} from 'react';
+import { get, post, put, del } from 'aws-amplify/api';
+import { fetchAuthSession } from 'aws-amplify/auth';
+import { monitoredAPICall } from '../utils/awsServiceHealth';
 
 export type Medication = {
-  id: number;
+  medicationId: string;
   name: string;
   dosage: string;
   frequency: string;
-  nextDose: string;
-  reminder: boolean;
+  reminders: string[];
+  startDate?: string;
+  endDate?: string;
+  notes?: string;
+  active: boolean;
+  createdAt?: number;
+  updatedAt?: number;
 };
 
 type Ctx = {
   items: Medication[];
-  addMedication: (payload: Omit<Medication, 'id'>) => void;
-  updateMedication: (id: number, payload: Partial<Omit<Medication, 'id'>>) => void;
-  removeMedication: (id: number) => void;
-  toggleReminder: (id: number, value: boolean) => void;
+  loading: boolean;
+  addMedication: (payload: Omit<Medication, 'medicationId' | 'createdAt' | 'updatedAt'>) => Promise<void>;
+  updateMedication: (medicationId: string, payload: Partial<Omit<Medication, 'medicationId' | 'createdAt' | 'updatedAt'>>) => Promise<void>;
+  removeMedication: (medicationId: string) => Promise<void>;
+  refreshMedications: () => Promise<void>;
 };
 
 const MedicationsContext = createContext<Ctx | undefined>(undefined);
 
-const seed: Medication[] = [
-  {id: 1, name: 'Metformin', dosage: '500mg', frequency: 'Twice daily', nextDose: '8:00 AM', reminder: true},
-  {id: 2, name: 'Lisinopril', dosage: '10mg', frequency: 'Once daily', nextDose: '2:00 PM', reminder: true},
-  {id: 3, name: 'Atorvastatin', dosage: '20mg', frequency: 'Once daily', nextDose: '9:00 PM', reminder: false},
-];
-
 export function MedicationsProvider({children}: {children: React.ReactNode}) {
-  const [items, setItems] = useState<Medication[]>(seed);
-  const [nextId, setNextId] = useState(seed.length + 1);
+  const [items, setItems] = useState<Medication[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  const addMedication = useCallback((payload: Omit<Medication, 'id'>) => {
-    setItems(prev => [...prev, {id: nextId, ...payload}]);
-    setNextId(n => n + 1);
-  }, [nextId]);
+  const getAuthToken = async () => {
+    const session = await fetchAuthSession();
+    return session?.tokens?.idToken?.toString();
+  };
 
-  const updateMedication = useCallback((id: number, payload: Partial<Omit<Medication, 'id'>>) => {
-    setItems(prev => prev.map(item => (item.id === id ? {...item, ...payload} : item)));
+  const refreshMedications = useCallback(async () => {
+    try {
+      setLoading(true);
+      const token = await getAuthToken();
+
+      const response = await monitoredAPICall(
+        'API_GATEWAY',
+        async () => {
+          return await get({
+            apiName: 'beaumedApi',
+            path: '/medications',
+            options: {
+              headers: {
+                'Authorization': `Bearer ${token}`,
+              },
+            },
+          }).response;
+        },
+        'us-east-1'
+      );
+
+      const data = await response.body.json() as any;
+      console.log('📋 Fetched medications:', data);
+
+      setItems(data.medications || []);
+    } catch (error) {
+      console.error('Failed to load medications:', error);
+      setItems([]);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  const removeMedication = useCallback((id: number) => {
-    setItems(prev => prev.filter(item => item.id !== id));
-  }, []);
+  const addMedication = useCallback(async (payload: Omit<Medication, 'medicationId' | 'createdAt' | 'updatedAt'>) => {
+    try {
+      setLoading(true);
+      const token = await getAuthToken();
 
-  const toggleReminder = useCallback((id: number, value: boolean) => {
-    setItems(prev => prev.map(item => (item.id === id ? {...item, reminder: value} : item)));
-  }, []);
+      const response = await monitoredAPICall(
+        'API_GATEWAY',
+        async () => {
+          return await post({
+            apiName: 'beaumedApi',
+            path: '/medications',
+            options: {
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+              },
+              body: payload,
+            },
+          }).response;
+        },
+        'us-east-1'
+      );
+
+      const data = await response.body.json() as any;
+      console.log('✅ Medication created:', data);
+
+      // Refresh the list
+      await refreshMedications();
+    } catch (error) {
+      console.error('Failed to create medication:', error);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  }, [refreshMedications]);
+
+  const updateMedication = useCallback(async (medicationId: string, payload: Partial<Omit<Medication, 'medicationId' | 'createdAt' | 'updatedAt'>>) => {
+    try {
+      setLoading(true);
+      const token = await getAuthToken();
+
+      const response = await monitoredAPICall(
+        'API_GATEWAY',
+        async () => {
+          return await put({
+            apiName: 'beaumedApi',
+            path: `/medications/${medicationId}`,
+            options: {
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+              },
+              body: payload,
+            },
+          }).response;
+        },
+        'us-east-1'
+      );
+
+      const data = await response.body.json() as any;
+      console.log('✅ Medication updated:', data);
+
+      // Refresh the list
+      await refreshMedications();
+    } catch (error) {
+      console.error('Failed to update medication:', error);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  }, [refreshMedications]);
+
+  const removeMedication = useCallback(async (medicationId: string) => {
+    try {
+      setLoading(true);
+      const token = await getAuthToken();
+
+      const response = await monitoredAPICall(
+        'API_GATEWAY',
+        async () => {
+          return await del({
+            apiName: 'beaumedApi',
+            path: `/medications/${medicationId}`,
+            options: {
+              headers: {
+                'Authorization': `Bearer ${token}`,
+              },
+            },
+          }).response;
+        },
+        'us-east-1'
+      );
+
+      const data = await response.body.json() as any;
+      console.log('✅ Medication deleted:', data);
+
+      // Refresh the list
+      await refreshMedications();
+    } catch (error) {
+      console.error('Failed to delete medication:', error);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  }, [refreshMedications]);
 
   const value = useMemo<Ctx>(() => ({
     items,
+    loading,
     addMedication,
     updateMedication,
     removeMedication,
-    toggleReminder,
-  }), [items, addMedication, updateMedication, removeMedication, toggleReminder]);
+    refreshMedications,
+  }), [items, loading, addMedication, updateMedication, removeMedication, refreshMedications]);
+
+  // Load medications on mount
+  useEffect(() => {
+    refreshMedications();
+  }, [refreshMedications]);
 
   return <MedicationsContext.Provider value={value}>{children}</MedicationsContext.Provider>;
 }

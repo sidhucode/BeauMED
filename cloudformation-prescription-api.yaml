@@ -1,0 +1,199 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'API Gateway endpoints for BeauMED Prescription Upload with Cognito authorization'
+
+Parameters:
+  RestApiId:
+    Type: String
+    Default: 'dchf2ja7ti'
+    Description: 'Existing API Gateway REST API ID'
+
+  RootResourceId:
+    Type: String
+    Description: 'Root resource ID of the API Gateway'
+
+  AuthorizerId:
+    Type: String
+    Description: 'Cognito User Pool Authorizer ID'
+
+  S3PresignerLambdaArn:
+    Type: String
+    Default: 'arn:aws:lambda:us-west-1:167375318089:function:s3-presigner'
+    Description: 'ARN of the s3-presigner Lambda function'
+
+  PrescriptionAnalyzerLambdaArn:
+    Type: String
+    Default: 'arn:aws:lambda:us-west-1:167375318089:function:prescription-analyzer'
+    Description: 'ARN of the prescription-analyzer Lambda function'
+
+  DeploymentStageName:
+    Type: String
+    Default: 'dev'
+    Description: 'API Gateway deployment stage name'
+
+Resources:
+  # /get-upload-url resource
+  GetUploadUrlResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref RestApiId
+      ParentId: !Ref RootResourceId
+      PathPart: 'get-upload-url'
+
+  # POST /get-upload-url
+  GetUploadUrlPostMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref RestApiId
+      ResourceId: !Ref GetUploadUrlResource
+      HttpMethod: POST
+      AuthorizationType: COGNITO_USER_POOLS
+      AuthorizerId: !Ref AuthorizerId
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${S3PresignerLambdaArn}/invocations'
+        IntegrationResponses:
+          - StatusCode: 200
+      MethodResponses:
+        - StatusCode: 200
+          ResponseModels:
+            application/json: 'Empty'
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Origin: true
+
+  # OPTIONS /get-upload-url (for CORS)
+  GetUploadUrlOptionsMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref RestApiId
+      ResourceId: !Ref GetUploadUrlResource
+      HttpMethod: OPTIONS
+      AuthorizationType: NONE
+      Integration:
+        Type: MOCK
+        IntegrationResponses:
+          - StatusCode: 200
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'POST,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+            ResponseTemplates:
+              application/json: ''
+        PassthroughBehavior: WHEN_NO_MATCH
+        RequestTemplates:
+          application/json: '{"statusCode": 200}'
+      MethodResponses:
+        - StatusCode: 200
+          ResponseModels:
+            application/json: 'Empty'
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+
+  # /analyze-prescription resource
+  AnalyzePrescriptionResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref RestApiId
+      ParentId: !Ref RootResourceId
+      PathPart: 'analyze-prescription'
+
+  # POST /analyze-prescription
+  AnalyzePrescriptionPostMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref RestApiId
+      ResourceId: !Ref AnalyzePrescriptionResource
+      HttpMethod: POST
+      AuthorizationType: COGNITO_USER_POOLS
+      AuthorizerId: !Ref AuthorizerId
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${PrescriptionAnalyzerLambdaArn}/invocations'
+        IntegrationResponses:
+          - StatusCode: 200
+      MethodResponses:
+        - StatusCode: 200
+          ResponseModels:
+            application/json: 'Empty'
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Origin: true
+
+  # OPTIONS /analyze-prescription (for CORS)
+  AnalyzePrescriptionOptionsMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref RestApiId
+      ResourceId: !Ref AnalyzePrescriptionResource
+      HttpMethod: OPTIONS
+      AuthorizationType: NONE
+      Integration:
+        Type: MOCK
+        IntegrationResponses:
+          - StatusCode: 200
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'POST,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+            ResponseTemplates:
+              application/json: ''
+        PassthroughBehavior: WHEN_NO_MATCH
+        RequestTemplates:
+          application/json: '{"statusCode": 200}'
+      MethodResponses:
+        - StatusCode: 200
+          ResponseModels:
+            application/json: 'Empty'
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+
+  # Lambda permissions for API Gateway
+  S3PresignerInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref S3PresignerLambdaArn
+      Action: 'lambda:InvokeFunction'
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${RestApiId}/*'
+
+  PrescriptionAnalyzerInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref PrescriptionAnalyzerLambdaArn
+      Action: 'lambda:InvokeFunction'
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${RestApiId}/*'
+
+  # API Gateway Deployment
+  ApiDeployment:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn:
+      - GetUploadUrlPostMethod
+      - GetUploadUrlOptionsMethod
+      - AnalyzePrescriptionPostMethod
+      - AnalyzePrescriptionOptionsMethod
+    Properties:
+      RestApiId: !Ref RestApiId
+      StageName: !Ref DeploymentStageName
+      Description: 'Deployment for prescription upload API endpoints'
+
+Outputs:
+  GetUploadUrlResourceId:
+    Description: 'Resource ID for /get-upload-url'
+    Value: !Ref GetUploadUrlResource
+    Export:
+      Name: !Sub '${AWS::StackName}-GetUploadUrlResourceId'
+
+  AnalyzePrescriptionResourceId:
+    Description: 'Resource ID for /analyze-prescription'
+    Value: !Ref AnalyzePrescriptionResource
+    Export:
+      Name: !Sub '${AWS::StackName}-AnalyzePrescriptionResourceId'
+
+  ApiEndpoint:
+    Description: 'API Gateway endpoint URL for prescription upload'
+    Value: !Sub 'https://${RestApiId}.execute-api.${AWS::Region}.amazonaws.com/${DeploymentStageName}/'

@@ -1,11 +1,13 @@
 import React, {useState, useEffect} from 'react';
 import {SafeAreaView, View, Text, StyleSheet, TextInput, Pressable, Alert} from 'react-native';
 import {useRouter} from '../navigation/SimpleRouter';
-import {signUp, signIn, signOut, getCurrentUser} from 'aws-amplify/auth';
+import {signUp, signIn, signOut, getCurrentUser, resetPassword, confirmResetPassword, confirmSignUp, resendSignUpCode} from 'aws-amplify/auth';
+import {useProfile} from '../state/ProfileContext';
 
 export default function AuthScreen() {
   const {navigate} = useRouter();
-  const [tab, setTab] = useState<'login'|'signup'>('login');
+  const {loadUserProfile} = useProfile();
+  const [tab, setTab] = useState<'login'|'signup'|'reset'>('login');
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -13,6 +15,16 @@ export default function AuthScreen() {
   const [phone, setPhone] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  // Password reset states
+  const [resetCode, setResetCode] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
+  const [resetStep, setResetStep] = useState<'email'|'code'>('email');
+
+  // Sign-up verification states
+  const [signupCode, setSignupCode] = useState('');
+  const [needsVerification, setNeedsVerification] = useState(false);
 
   // Check if user is already logged in
   useEffect(() => {
@@ -56,13 +68,15 @@ export default function AuthScreen() {
         },
       });
       console.log('Sign Up Success:', result);
-      Alert.alert('Success', 'Account created! If email verification is required, check your email to confirm. Then return to Sign In.');
-      setTab('login');
-      setEmail('');
-      setPassword('');
-      setConfirmPassword('');
-      setName('');
-      setPhone('');
+
+      // Check if user needs to verify email
+      if (result.nextStep.signUpStep === 'CONFIRM_SIGN_UP') {
+        Alert.alert('Check Your Email', 'A verification code has been sent to your email address. Please enter it below to complete sign-up.');
+        setNeedsVerification(true);
+      } else {
+        Alert.alert('Success', 'Account created successfully! You can now log in.');
+        setTab('login');
+      }
     } catch (error: any) {
       console.error('Sign Up Error:', error);
       Alert.alert('Sign Up Error', error.message || 'Failed to create account');
@@ -77,21 +91,148 @@ export default function AuthScreen() {
       return;
     }
 
+    console.log('🔐 Attempting sign in with:', email);
     setLoading(true);
     try {
-      await signIn({
+      const result = await signIn({
         username: email,
         password,
+        options: {
+          authFlowType: 'USER_PASSWORD_AUTH',
+        },
       });
+      console.log('✅ Sign in successful!', result);
+
+      // Load user profile from Cognito
+      await loadUserProfile();
+
       setIsAuthenticated(true);
       navigate('Dashboard');
     } catch (error: any) {
-      console.error('Sign In Error Details:', error);
+      console.error('❌ Sign In Error Details:', error);
       console.error('Error Code:', error.code);
       console.error('Error Name:', error.name);
       console.error('Error Message:', error.message);
+      console.error('Error Constructor:', error.constructor?.name);
       console.error('Full Error:', JSON.stringify(error, null, 2));
+      console.error('Error Keys:', Object.keys(error));
+      console.error('Error Stack:', error.stack);
       Alert.alert('Sign In Error', error.message || error.code || 'Failed to sign in. Check console for details.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleConfirmSignUp = async () => {
+    if (!signupCode.trim()) {
+      Alert.alert('Error', 'Please enter the verification code');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await confirmSignUp({
+        username: email,
+        confirmationCode: signupCode,
+      });
+      console.log('✅ Email verified successfully');
+      Alert.alert('Success', 'Email verified! You can now log in with your account.');
+
+      // Reset state and go to login
+      setNeedsVerification(false);
+      setSignupCode('');
+      setTab('login');
+      setPassword('');
+      setConfirmPassword('');
+      setName('');
+      setPhone('');
+    } catch (error: any) {
+      console.error('❌ Confirm Sign Up Error:', error);
+      Alert.alert('Error', error.message || 'Failed to verify email. Please check your code and try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResendSignUpCode = async () => {
+    if (!email.trim()) {
+      Alert.alert('Error', 'Email is required');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await resendSignUpCode({username: email});
+      console.log('✅ Verification code resent');
+      Alert.alert('Code Sent', 'A new verification code has been sent to your email.');
+    } catch (error: any) {
+      console.error('❌ Resend Code Error:', error);
+      Alert.alert('Error', error.message || 'Failed to resend code.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRequestReset = async () => {
+    if (!email.trim()) {
+      Alert.alert('Error', 'Please enter your email address');
+      return;
+    }
+
+    console.log('🔄 Starting password reset for:', email);
+    setLoading(true);
+    try {
+      const result = await resetPassword({username: email});
+      console.log('✅ Password reset result:', result);
+      console.log('✅ Password reset code sent to', email);
+      console.log('🔄 Setting resetStep to "code"');
+      setResetStep('code');
+      console.log('✅ resetStep changed, should show code input now');
+      Alert.alert('Check Your Email', 'A verification code has been sent to your email address.');
+    } catch (error: any) {
+      console.error('❌ Reset Password Error:', error);
+      console.error('❌ Error details:', JSON.stringify(error, null, 2));
+      Alert.alert('Error', error.message || 'Failed to send reset code. Please try again.');
+    } finally {
+      setLoading(false);
+      console.log('✅ Loading state set to false');
+    }
+  };
+
+  const handleConfirmReset = async () => {
+    if (!resetCode.trim()) {
+      Alert.alert('Error', 'Please enter the verification code');
+      return;
+    }
+    if (!newPassword.trim()) {
+      Alert.alert('Error', 'Please enter a new password');
+      return;
+    }
+    if (newPassword !== confirmNewPassword) {
+      Alert.alert('Error', 'Passwords do not match');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await confirmResetPassword({
+        username: email,
+        confirmationCode: resetCode,
+        newPassword: newPassword,
+      });
+      console.log('✅ Password reset successful');
+      Alert.alert('Success', 'Your password has been reset successfully! You can now log in with your new password.');
+
+      // Reset state and go back to login
+      setTab('login');
+      setResetStep('email');
+      setResetCode('');
+      setNewPassword('');
+      setConfirmNewPassword('');
+      setPassword('');
+    } catch (error: any) {
+      console.error('❌ Confirm Reset Error:', error);
+      Alert.alert('Error', error.message || 'Failed to reset password. Please check your code and try again.');
     } finally {
       setLoading(false);
     }
@@ -100,8 +241,18 @@ export default function AuthScreen() {
   const submit = () => {
     if (tab === 'login') {
       handleSignIn();
-    } else {
-      handleSignUp();
+    } else if (tab === 'signup') {
+      if (needsVerification) {
+        handleConfirmSignUp();
+      } else {
+        handleSignUp();
+      }
+    } else if (tab === 'reset') {
+      if (resetStep === 'email') {
+        handleRequestReset();
+      } else {
+        handleConfirmReset();
+      }
     }
   };
 
@@ -122,7 +273,66 @@ export default function AuthScreen() {
         </Pressable>
       </View>
 
-      {tab === 'login' ? (
+      {tab === 'reset' ? (
+        <View style={styles.form}>
+          {resetStep === 'email' ? (
+            <>
+              <Text style={styles.label}>Email</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="you@example.com"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                value={email}
+                onChangeText={setEmail}
+                editable={!loading}
+              />
+              <Pressable onPress={() => setTab('login')}>
+                <Text style={styles.link}>Back to Log In</Text>
+              </Pressable>
+              <Pressable style={styles.primaryBtn} onPress={submit} disabled={loading}>
+                <Text style={styles.primaryBtnText}>{loading ? 'Sending code...' : 'Send Reset Code'}</Text>
+              </Pressable>
+            </>
+          ) : (
+            <>
+              <Text style={styles.label}>Verification Code</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Enter 6-digit code"
+                keyboardType="number-pad"
+                value={resetCode}
+                onChangeText={setResetCode}
+                editable={!loading}
+              />
+              <Text style={styles.label}>New Password</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="••••••••"
+                secureTextEntry
+                value={newPassword}
+                onChangeText={setNewPassword}
+                editable={!loading}
+              />
+              <Text style={styles.label}>Confirm New Password</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="••••••••"
+                secureTextEntry
+                value={confirmNewPassword}
+                onChangeText={setConfirmNewPassword}
+                editable={!loading}
+              />
+              <Pressable onPress={() => setResetStep('email')}>
+                <Text style={styles.link}>Resend Code</Text>
+              </Pressable>
+              <Pressable style={[styles.primaryBtn, {marginTop: 16}]} onPress={submit} disabled={loading}>
+                <Text style={styles.primaryBtnText}>{loading ? 'Resetting...' : 'Reset Password'}</Text>
+              </Pressable>
+            </>
+          )}
+        </View>
+      ) : tab === 'login' ? (
         <View style={styles.form}> 
           <Text style={styles.label}>Email</Text>
           <TextInput 
@@ -143,7 +353,7 @@ export default function AuthScreen() {
             onChangeText={setPassword}
             editable={!loading}
           />
-          <Pressable>
+          <Pressable onPress={() => { setTab('reset'); setResetStep('email'); }}>
             <Text style={styles.link}>Forgot password?</Text>
           </Pressable>
           <Pressable style={styles.primaryBtn} onPress={submit} disabled={loading}>
@@ -152,54 +362,76 @@ export default function AuthScreen() {
         </View>
       ) : (
         <View style={styles.form}>
-          <Text style={styles.label}>Full Name</Text>
-          <TextInput 
-            style={styles.input} 
-            placeholder="John Doe" 
-            value={name}
-            onChangeText={setName}
-            editable={!loading}
-          />
-          <Text style={styles.label}>Email</Text>
-          <TextInput 
-            style={styles.input} 
-            placeholder="you@example.com" 
-            keyboardType="email-address" 
-            autoCapitalize="none"
-            value={email}
-            onChangeText={setEmail}
-            editable={!loading}
-          />
-          <Text style={styles.label}>Phone Number</Text>
-          <TextInput 
-            style={styles.input} 
-            placeholder="+1 (555) 123-4567" 
-            keyboardType="phone-pad"
-            value={phone}
-            onChangeText={setPhone}
-            editable={!loading}
-          />
-          <Text style={styles.label}>Password</Text>
-          <TextInput 
-            style={styles.input} 
-            placeholder="••••••••" 
-            secureTextEntry 
-            value={password}
-            onChangeText={setPassword}
-            editable={!loading}
-          />
-          <Text style={styles.label}>Confirm Password</Text>
-          <TextInput 
-            style={styles.input} 
-            placeholder="••••••••" 
-            secureTextEntry 
-            value={confirmPassword}
-            onChangeText={setConfirmPassword}
-            editable={!loading}
-          />
-          <Pressable style={styles.primaryBtn} onPress={submit} disabled={loading}>
-            <Text style={styles.primaryBtnText}>{loading ? 'Creating account...' : 'Create Account'}</Text>
-          </Pressable>
+          {needsVerification ? (
+            <>
+              <Text style={styles.label}>Verification Code</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Enter 6-digit code"
+                keyboardType="number-pad"
+                value={signupCode}
+                onChangeText={setSignupCode}
+                editable={!loading}
+              />
+              <Pressable onPress={handleResendSignUpCode}>
+                <Text style={styles.link}>Resend Code</Text>
+              </Pressable>
+              <Pressable style={[styles.primaryBtn, {marginTop: 16}]} onPress={submit} disabled={loading}>
+                <Text style={styles.primaryBtnText}>{loading ? 'Verifying...' : 'Verify Email'}</Text>
+              </Pressable>
+            </>
+          ) : (
+            <>
+              <Text style={styles.label}>Full Name</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="John Doe"
+                value={name}
+                onChangeText={setName}
+                editable={!loading}
+              />
+              <Text style={styles.label}>Email</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="you@example.com"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                value={email}
+                onChangeText={setEmail}
+                editable={!loading}
+              />
+              <Text style={styles.label}>Phone Number</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="+1 (555) 123-4567"
+                keyboardType="phone-pad"
+                value={phone}
+                onChangeText={setPhone}
+                editable={!loading}
+              />
+              <Text style={styles.label}>Password</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="••••••••"
+                secureTextEntry
+                value={password}
+                onChangeText={setPassword}
+                editable={!loading}
+              />
+              <Text style={styles.label}>Confirm Password</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="••••••••"
+                secureTextEntry
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+                editable={!loading}
+              />
+              <Pressable style={[styles.primaryBtn, {marginTop: 32}]} onPress={submit} disabled={loading}>
+                <Text style={styles.primaryBtnText}>{loading ? 'Creating account...' : 'Create Account'}</Text>
+              </Pressable>
+            </>
+          )}
         </View>
       )}
     </SafeAreaView>
@@ -218,7 +450,7 @@ const styles = StyleSheet.create({
   tabActive: {backgroundColor: 'white'},
   tabText: {color: '#6b7280', fontWeight: '600'},
   tabTextActive: {color: '#111827'},
-  form: {marginTop: 16},
+  form: {marginTop: 16, paddingHorizontal: 16},
   label: {color: '#374151', marginBottom: 6, marginTop: 10},
   input: {backgroundColor: 'white', borderRadius: 10, paddingHorizontal: 12, height: 44, borderWidth: 1, borderColor: '#e5e7eb'},
   link: {color: '#4f46e5', marginVertical: 10},
