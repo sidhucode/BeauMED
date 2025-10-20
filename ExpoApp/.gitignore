@@ -32,6 +32,7 @@ yarn-error.*
 
 # local env files
 .env*.local
+.env
 
 # AWS credentials (sensitive, should not be tracked)
 aws-exports.ts

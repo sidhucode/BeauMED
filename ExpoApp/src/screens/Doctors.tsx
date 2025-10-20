@@ -1,47 +1,43 @@
-import React, {useMemo, useState} from 'react';
-import {SafeAreaView, View, Text, StyleSheet, TextInput, Pressable, FlatList} from 'react-native';
+import React, {useCallback, useEffect, useMemo, useState} from 'react';
+import {SafeAreaView, View, Text, StyleSheet, TextInput, Pressable, FlatList, ActivityIndicator, Linking} from 'react-native';
 import {useRouter} from '../navigation/SimpleRouter';
 import {useTheme, ThemeColors} from '../state/ThemeContext';
 
 type Doctor = {
-  id: number;
+  id: string;
   name: string;
   specialty: string;
-  rating: number;
-  distance: string;
-  address: string;
-  phone: string;
+  rating?: number;
+  distanceMiles?: number;
+  address?: string;
+  phone?: string | null;
+  placeId: string;
 };
 
-const INITIAL_DOCTORS: Doctor[] = [
-  {
-    id: 1,
-    name: 'Dr. Sarah Johnson',
-    specialty: 'Family Medicine',
-    rating: 4.8,
-    distance: '1.2 miles',
-    address: '123 Medical Center Dr, Suite 100',
-    phone: '(555) 123-4567',
-  },
-  {
-    id: 2,
-    name: 'Dr. Michael Chen',
-    specialty: 'Cardiology',
-    rating: 4.9,
-    distance: '2.5 miles',
-    address: '456 Heart Health Blvd, Suite 200',
-    phone: '(555) 234-5678',
-  },
-  {
-    id: 3,
-    name: 'Dr. Emily Rodriguez',
-    specialty: 'Internal Medicine',
-    rating: 4.7,
-    distance: '3.1 miles',
-    address: '789 Wellness Ave, Suite 300',
-    phone: '(555) 345-6789',
-  },
-];
+const GOOGLE_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY ?? '';
+const DEFAULT_CITY_QUERY = 'doctors in San Jose, California';
+const DEFAULT_COORDINATE = {lat: 37.3382, lng: -121.8863};
+
+const haversineMiles = (from: typeof DEFAULT_COORDINATE, to: {lat: number; lng: number}) => {
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const earthRadiusMiles = 3958.8;
+  const dLat = toRad(to.lat - from.lat);
+  const dLng = toRad(to.lng - from.lng);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(from.lat)) * Math.cos(toRad(to.lat)) * Math.sin(dLng / 2) ** 2;
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return earthRadiusMiles * c;
+};
+
+const formatSpecialty = (types?: string[]) => {
+  if (!types || types.length === 0) return 'Healthcare Provider';
+  const primary = types.find(type => type !== 'point_of_interest' && type !== 'establishment') ?? types[0];
+  return primary
+    .split('_')
+    .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+};
 
 export default function DoctorsScreen() {
   const {navigate} = useRouter();
@@ -49,9 +45,94 @@ export default function DoctorsScreen() {
   const styles = useMemo(() => createStyles(colors), [colors]);
 
   const [query, setQuery] = useState('');
-  const filtered = INITIAL_DOCTORS.filter(doctor =>
-    `${doctor.name} ${doctor.specialty}`.toLowerCase().includes(query.toLowerCase()),
+  const [doctors, setDoctors] = useState<Doctor[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchDoctorDetails = useCallback(async (placeId: string) => {
+    if (!GOOGLE_API_KEY) return null;
+    try {
+      const detailsUrl = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${encodeURIComponent(
+        placeId,
+      )}&fields=formatted_phone_number,website&key=${GOOGLE_API_KEY}`;
+      const response = await fetch(detailsUrl);
+      const data = await response.json();
+      if (data.status !== 'OK') return null;
+      return data.result?.formatted_phone_number ?? null;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const fetchDoctors = useCallback(
+    async (search: string) => {
+      if (!GOOGLE_API_KEY) {
+        setError('Google Maps API key is missing. Update EXPO_PUBLIC_GOOGLE_MAPS_API_KEY in .env.');
+        return;
+      }
+
+      setLoading(true);
+      setError(null);
+      try {
+        const textUrl = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(
+          search,
+        )}&key=${GOOGLE_API_KEY}&type=doctor`;
+        const response = await fetch(textUrl);
+        const data = await response.json();
+
+        if (data.status !== 'OK') {
+          setDoctors([]);
+          setError(data.error_message || data.status || 'Failed to fetch doctors.');
+          return;
+        }
+
+        const results = data.results.slice(0, 12);
+        const enriched = await Promise.all(
+          results.map(async (place: any) => {
+            const distanceMiles =
+              place.geometry?.location
+                ? haversineMiles(DEFAULT_COORDINATE, place.geometry.location)
+                : undefined;
+
+            const phone = await fetchDoctorDetails(place.place_id);
+
+            return {
+              id: place.place_id,
+              placeId: place.place_id,
+              name: place.name,
+              specialty: formatSpecialty(place.types),
+              rating: place.rating,
+              distanceMiles,
+              address: place.formatted_address,
+              phone,
+            } as Doctor;
+          }),
+        );
+
+        setDoctors(enriched);
+      } catch (err) {
+        console.error(err);
+        setError('Unable to load doctors right now. Please try again.');
+      } finally {
+        setLoading(false);
+      }
+    },
+    [fetchDoctorDetails],
   );
+
+  useEffect(() => {
+    fetchDoctors(DEFAULT_CITY_QUERY);
+  }, [fetchDoctors]);
+
+  const handleSearch = useCallback(() => {
+    const searchTerm = query.trim();
+    fetchDoctors(searchTerm.length > 0 ? `doctors in ${searchTerm}` : DEFAULT_CITY_QUERY);
+  }, [fetchDoctors, query]);
+
+  const handleCall = useCallback((phone?: string | null) => {
+    if (!phone) return;
+    Linking.openURL(`tel:${phone.replace(/[^0-9+]/g, '')}`).catch(() => undefined);
+  }, []);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -67,19 +148,40 @@ export default function DoctorsScreen() {
         <TextInput
           value={query}
           onChangeText={setQuery}
-          placeholder="Search by name or specialty..."
+          placeholder="Search by city or specialty..."
           placeholderTextColor={colors.muted}
           style={styles.search}
+          onSubmitEditing={handleSearch}
+          returnKeyType="search"
         />
-        <Pressable style={styles.filterBtn}>
-          <Text style={styles.filterText}>Filter</Text>
+        <Pressable style={styles.filterBtn} onPress={handleSearch}>
+          <Text style={styles.filterText}>Search</Text>
         </Pressable>
       </View>
 
+      {loading && (
+        <View style={styles.feedback}>
+          <ActivityIndicator color={colors.primary} />
+          <Text style={styles.feedbackText}>Fetching doctors…</Text>
+        </View>
+      )}
+
+      {error && !loading && (
+        <View style={styles.feedback}>
+          <Text style={styles.errorText}>{error}</Text>
+        </View>
+      )}
+
+      {!loading && !error && doctors.length === 0 && (
+        <View style={styles.feedback}>
+          <Text style={styles.feedbackText}>No doctors found. Try a different city or specialty.</Text>
+        </View>
+      )}
+
       <FlatList
         contentContainerStyle={styles.listContent}
-        data={filtered}
-        keyExtractor={item => String(item.id)}
+        data={doctors}
+        keyExtractor={item => item.id}
         renderItem={({item}) => (
           <View style={styles.card}>
             <View style={styles.cardTop}>
@@ -87,17 +189,27 @@ export default function DoctorsScreen() {
                 <Text style={styles.name}>{item.name}</Text>
                 <Text style={styles.muted}>{item.specialty}</Text>
               </View>
-              <View style={styles.rating}>
-                <Text style={styles.ratingText}>★ {item.rating.toFixed(1)}</Text>
-              </View>
+              {typeof item.rating === 'number' && (
+                <View style={styles.rating}>
+                  <Text style={styles.ratingText}>★ {item.rating.toFixed(1)}</Text>
+                </View>
+              )}
             </View>
             <View style={styles.cardDetails}>
-              <Text style={styles.muted}>📍 {item.address}</Text>
-              <Text style={styles.muted}>🧭 {item.distance} away</Text>
+              {item.address ? <Text style={styles.muted}>📍 {item.address}</Text> : null}
+              {item.distanceMiles !== undefined ? (
+                <Text style={styles.muted}>🧭 {item.distanceMiles.toFixed(1)} miles away</Text>
+              ) : null}
             </View>
             <View style={styles.actionsRow}>
-              <Pressable style={[styles.outlineBtn, {flex: 1}]}>
-                <Text style={styles.outlineText}>📞 Call</Text>
+              <Pressable
+                style={[styles.outlineBtn, {flex: 1}, !item.phone && styles.disabledBtn]}
+                onPress={() => handleCall(item.phone)}
+                disabled={!item.phone}
+              >
+                <Text style={[styles.outlineText, !item.phone && styles.disabledText]}>
+                  📞 {item.phone ? 'Call' : 'No Phone'}
+                </Text>
               </Pressable>
               <Pressable style={[styles.primaryBtn, {flex: 1}]}>
                 <Text style={styles.primaryBtnText}>🧭 Directions</Text>
@@ -153,6 +265,9 @@ const createStyles = (colors: ThemeColors) =>
       borderColor: colors.border,
     },
     filterText: {color: colors.text, fontWeight: '600'},
+    feedback: {paddingHorizontal: 16, paddingVertical: 12, alignItems: 'center'},
+    feedbackText: {color: colors.muted},
+    errorText: {color: '#ef4444', textAlign: 'center'},
     listContent: {padding: 16, paddingBottom: 100},
     card: {
       backgroundColor: colors.card,
@@ -180,6 +295,8 @@ const createStyles = (colors: ThemeColors) =>
       backgroundColor: colors.card,
     },
     outlineText: {color: colors.text, fontWeight: '600'},
+    disabledBtn: {opacity: 0.5},
+    disabledText: {color: colors.muted},
     primaryBtn: {
       height: 40,
       borderRadius: 10,
@@ -189,4 +306,3 @@ const createStyles = (colors: ThemeColors) =>
     },
     primaryBtnText: {color: colors.primaryText, fontWeight: '600'},
   });
-

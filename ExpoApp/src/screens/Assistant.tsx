@@ -1,7 +1,7 @@
 import React, {useMemo, useState} from 'react';
 import {SafeAreaView, View, Text, StyleSheet, TextInput, Pressable, FlatList, ActivityIndicator} from 'react-native';
 import {useRouter} from '../navigation/SimpleRouter';
-import {get, post} from 'aws-amplify/api';
+import {post} from 'aws-amplify/api';
 import {fetchAuthSession} from 'aws-amplify/auth';
 import {useTheme, ThemeColors} from '../state/ThemeContext';
 
@@ -48,10 +48,11 @@ export default function AssistantScreen() {
         },
       }).response;
 
-      const result = await response.body.json();
+      const result = (await response.body.json()) as Record<string, unknown>;
       const aiContent =
-        (result && typeof result === 'object' && 'response' in result && result.response) ||
-        "I couldn't process that. Please try again.";
+        typeof result?.response === 'string'
+          ? result.response
+          : "I couldn't process that. Please try again.";
 
       const aiMessage: Message = {id: userMessage.id + 1, role: 'assistant', content: aiContent};
       setMessages(prev => [...prev, aiMessage]);
@@ -178,3 +179,4 @@ const createStyles = (colors: ThemeColors) =>
       color: colors.inputText,
     },
   });
+
