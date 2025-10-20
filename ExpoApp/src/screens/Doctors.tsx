@@ -11,6 +11,7 @@ type Doctor = {
   distanceMiles?: number;
   address?: string;
   phone?: string | null;
+  coordinate?: {lat: number; lng: number} | null;
   placeId: string;
 };
 
@@ -89,10 +90,8 @@ export default function DoctorsScreen() {
         const results = data.results.slice(0, 12);
         const enriched = await Promise.all(
           results.map(async (place: any) => {
-            const distanceMiles =
-              place.geometry?.location
-                ? haversineMiles(DEFAULT_COORDINATE, place.geometry.location)
-                : undefined;
+            const coordinate = place.geometry?.location ?? null;
+            const distanceMiles = coordinate ? haversineMiles(DEFAULT_COORDINATE, coordinate) : undefined;
 
             const phone = await fetchDoctorDetails(place.place_id);
 
@@ -105,6 +104,7 @@ export default function DoctorsScreen() {
               distanceMiles,
               address: place.formatted_address,
               phone,
+              coordinate,
             } as Doctor;
           }),
         );
@@ -132,6 +132,18 @@ export default function DoctorsScreen() {
   const handleCall = useCallback((phone?: string | null) => {
     if (!phone) return;
     Linking.openURL(`tel:${phone.replace(/[^0-9+]/g, '')}`).catch(() => undefined);
+  }, []);
+
+  const handleDirections = useCallback((doctor: Doctor) => {
+    const destination =
+      doctor.address && doctor.address.length > 0
+        ? encodeURIComponent(doctor.address)
+        : doctor.coordinate
+        ? `${doctor.coordinate.lat},${doctor.coordinate.lng}`
+        : null;
+    if (!destination) return;
+    const url = `https://www.google.com/maps/dir/?api=1&destination=${destination}`;
+    Linking.openURL(url).catch(() => undefined);
   }, []);
 
   return (
@@ -211,8 +223,14 @@ export default function DoctorsScreen() {
                   📞 {item.phone ? 'Call' : 'No Phone'}
                 </Text>
               </Pressable>
-              <Pressable style={[styles.primaryBtn, {flex: 1}]}>
-                <Text style={styles.primaryBtnText}>🧭 Directions</Text>
+              <Pressable
+                style={[styles.primaryBtn, {flex: 1}, !item.address && !item.coordinate && styles.disabledBtn]}
+                onPress={() => handleDirections(item)}
+                disabled={!item.address && !item.coordinate}
+              >
+                <Text style={[styles.primaryBtnText, !item.address && !item.coordinate && styles.disabledText]}>
+                  🧭 Directions
+                </Text>
               </Pressable>
             </View>
           </View>
