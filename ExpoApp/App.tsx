@@ -1,4 +1,4 @@
-import React, {useEffect} from 'react';
+import React, {useEffect, useState} from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { ActivityIndicator, View, useColorScheme } from 'react-native';
 import { Amplify } from 'aws-amplify';
@@ -10,6 +10,7 @@ import { ThemeProvider, useTheme } from './src/state/ThemeContext';
 import { Dashboard, Auth, Onboarding, Doctors, Medications, Assistant, Profile, ProfileEdit, Symptoms, NotFound, Index, Notifications, MedicationForm } from './src/screens';
 import BottomNav from './src/components/BottomNav';
 import DevServiceStatusBanner from './src/components/DevServiceStatusBanner';
+import SplashScreen from './src/components/SplashScreen';
 import awsConfig from './aws-exports';
 
 // Initialize Amplify with AWS configuration
@@ -17,7 +18,7 @@ Amplify.configure(awsConfig);
 
 function Shell() {
   const {route} = useRouter();
-  const showNav = !['Onboarding', 'Notifications', 'MedicationForm', 'NotFound', 'Index', 'ProfileEdit'].includes(route);
+  const showNav = !['Onboarding', 'Notifications', 'MedicationForm', 'NotFound', 'Index', 'ProfileEdit', 'Auth'].includes(route);
   const {colors, theme, ready} = useTheme();
 
   if (!ready) {
@@ -51,6 +52,12 @@ function Shell() {
 }
 
 export default function App() {
+  const [showSplash, setShowSplash] = useState(true);
+
+  if (showSplash) {
+    return <SplashScreen onFinish={() => setShowSplash(false)} />;
+  }
+
   return (
     <RouterProvider initialRoute="Auth">
       <ThemeProvider>

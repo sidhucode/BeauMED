@@ -3,6 +3,8 @@ import {SafeAreaView, View, Text, StyleSheet, TextInput, Pressable, Alert} from 
 import {useRouter} from '../navigation/SimpleRouter';
 import {signUp, signIn, signOut, getCurrentUser, resetPassword, confirmResetPassword, confirmSignUp, resendSignUpCode} from 'aws-amplify/auth';
 import {useProfile} from '../state/ProfileContext';
+import HeartLogo from '../components/HeartLogo';
+import GradientWavesBackground from '../components/GradientWavesBackground';
 
 export default function AuthScreen() {
   const {navigate} = useRouter();
@@ -258,11 +260,15 @@ export default function AuthScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.headerBrand}> 
-        <View style={styles.logo}><Text style={styles.logoHeart}>❤</Text></View>
-        <Text style={styles.brand}>BeauMED</Text>
-        <Text style={styles.sub}>Your Health Companion</Text>
-      </View>
+      <GradientWavesBackground />
+      <View style={styles.content}>
+        <View style={styles.headerBrand}> 
+          <View style={styles.logoWrapper}>
+            <HeartLogo size={64} color="#4f46e5" animated={true} />
+          </View>
+          <Text style={styles.brand}>BeauMED</Text>
+          <Text style={styles.sub}>Your Health Companion</Text>
+        </View>
 
       <View style={styles.tabsRow}>
         <Pressable onPress={() => setTab('login')} style={[styles.tab, tab==='login' && styles.tabActive]}>
@@ -434,15 +440,16 @@ export default function AuthScreen() {
           )}
         </View>
       )}
+      </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {flex: 1, padding: 20, backgroundColor: '#f7f7fb'},
+  container: {flex: 1, backgroundColor: '#faf5ff'},
+  content: {flex: 1, padding: 20},
   headerBrand: {alignItems: 'center', marginTop: 24, marginBottom: 12},
-  logo: {width: 64, height: 64, borderRadius: 32, backgroundColor: '#4f46e5', alignItems: 'center', justifyContent: 'center'},
-  logoHeart: {color: 'white', fontSize: 28},
+  logoWrapper: {alignItems: 'center', justifyContent: 'center', marginBottom: 8},
   brand: {fontSize: 28, fontWeight: '700', color: '#111827', marginTop: 8},
   sub: {color: '#6b7280', marginTop: 2},
   tabsRow: {flexDirection: 'row', backgroundColor: '#e5e7eb', borderRadius: 10, overflow: 'hidden', marginTop: 16},
