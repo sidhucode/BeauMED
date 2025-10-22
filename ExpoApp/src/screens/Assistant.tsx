@@ -1,7 +1,6 @@
 import React, {useMemo, useState} from 'react';
 import {SafeAreaView, View, Text, StyleSheet, TextInput, Pressable, FlatList, ActivityIndicator} from 'react-native';
 import {useRouter} from '../navigation/SimpleRouter';
-import {post} from 'aws-amplify/api';
 import {fetchAuthSession} from 'aws-amplify/auth';
 import {useTheme, ThemeColors} from '../state/ThemeContext';
 
@@ -36,19 +35,30 @@ export default function AssistantScreen() {
       const session = await fetchAuthSession();
       const token = session?.tokens?.idToken?.toString();
 
-      const response = await post({
-        apiName: 'beaumedApi',
-        path: '/chat',
-        options: {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          body: {message: text},
-        },
-      }).response;
+      console.log('🔐 Fetched auth session');
+      console.log('📋 Token exists:', !!token);
+      console.log('📋 Token length:', token?.length);
+      if (token) {
+        console.log('📋 Token preview:', token.substring(0, 50) + '...');
+      }
 
-      const result = (await response.body.json()) as Record<string, unknown>;
+      // Use native fetch instead of Amplify's post() to avoid IAM signing
+      const response = await fetch('https://dchf2ja7ti.execute-api.us-east-1.amazonaws.com/dev/chat', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({message: text}),
+      });
+
+      console.log('✅ API response received:', response.status);
+
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status} ${response.statusText}`);
+      }
+
+      const result = await response.json() as Record<string, unknown>;
       const aiContent =
         typeof result?.response === 'string'
           ? result.response

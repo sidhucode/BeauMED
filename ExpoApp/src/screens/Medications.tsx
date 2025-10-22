@@ -1,4 +1,4 @@
-import React, {useMemo, useState} from 'react';
+import React, {useMemo, useState, useEffect} from 'react';
 import {SafeAreaView, View, Text, StyleSheet, Pressable, Switch, Alert, FlatList, ActivityIndicator} from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import {useRouter} from '../navigation/SimpleRouter';
@@ -13,6 +13,11 @@ export default function MedicationsScreen() {
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState('');
+
+  // Refresh medications when screen mounts
+  useEffect(() => {
+    refreshMedications();
+  }, [refreshMedications]);
 
   const scanPrescription = async () => {
     try {
