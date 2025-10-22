@@ -21,9 +21,27 @@ def lambda_handler(event, context):
     Routes based on HTTP method and path
     """
     try:
-        user_id = event['requestContext']['authorizer']['claims']['sub']  # From Cognito JWT
-        http_method = event['httpMethod']
-        body = json.loads(event.get('body', '{}')) if event.get('body') else {}
+        # Get HTTP method - handle both direct and nested structures
+        http_method = event.get('httpMethod', 'GET')
+
+        # Parse request body - handles both direct body and nested body structure
+        if isinstance(event.get('body'), str):
+            body = json.loads(event.get('body', '{}'))
+        elif isinstance(event.get('body'), dict):
+            body = event.get('body', {})
+        else:
+            body = {}
+
+        # Get user_id from authorizer context (handles both AWS and AWS_PROXY integration types)
+        try:
+            # AWS_PROXY integration type
+            user_id = event['requestContext']['authorizer']['claims']['sub']
+        except (KeyError, TypeError):
+            # AWS integration type - authorizer context is in different location
+            user_id = event['requestContext']['authorizer'].get('sub') or event['requestContext']['authorizer'].get('principalId')
+
+        if not user_id:
+            return {'error': 'Unauthorized - missing user ID'}
         
         # Route to appropriate handler
         if http_method == 'POST':
@@ -86,25 +104,16 @@ def create_medication(user_id, body):
         }
         
         medications_table.put_item(Item=item)
-        
+
+        # For AWS integration type, return data directly
         return {
-            'statusCode': 201,
-            'headers': {
-                'Content-Type': 'application/json',
-                'Access-Control-Allow-Origin': '*'
-            },
-            'body': json.dumps({
-                'medicationId': medication_id,
-                'message': f'Medication "{item["name"]}" created successfully'
-            })
+            'medicationId': medication_id,
+            'message': f'Medication "{item["name"]}" created successfully'
         }
-    
+
     except Exception as e:
         print(f"Create error: {str(e)}")
-        return {
-            'statusCode': 500,
-            'body': json.dumps({'error': str(e)})
-        }
+        return {'error': str(e)}
 
 
 def list_medications(user_id):
@@ -116,27 +125,18 @@ def list_medications(user_id):
             KeyConditionExpression='userId = :uid',
             ExpressionAttributeValues={':uid': user_id}
         )
-        
+
         items = response.get('Items', [])
-        
+
+        # For AWS integration type, return data directly
         return {
-            'statusCode': 200,
-            'headers': {
-                'Content-Type': 'application/json',
-                'Access-Control-Allow-Origin': '*'
-            },
-            'body': json.dumps({
-                'medications': items,
-                'count': len(items)
-            })
+            'medications': items,
+            'count': len(items)
         }
-    
+
     except Exception as e:
         print(f"List error: {str(e)}")
-        return {
-            'statusCode': 500,
-            'body': json.dumps({'error': str(e)})
-        }
+        return {'error': str(e)}
 
 
 def get_medication(user_id, medication_id):
@@ -150,28 +150,16 @@ def get_medication(user_id, medication_id):
                 'medicationId': medication_id
             }
         )
-        
+
         if 'Item' not in response:
-            return {
-                'statusCode': 404,
-                'body': json.dumps({'error': 'Medication not found'})
-            }
-        
-        return {
-            'statusCode': 200,
-            'headers': {
-                'Content-Type': 'application/json',
-                'Access-Control-Allow-Origin': '*'
-            },
-            'body': json.dumps(response['Item'])
-        }
-    
+            return {'error': 'Medication not found'}
+
+        # For AWS integration type, return data directly
+        return response['Item']
+
     except Exception as e:
         print(f"Get error: {str(e)}")
-        return {
-            'statusCode': 500,
-            'body': json.dumps({'error': str(e)})
-        }
+        return {'error': str(e)}
 
 
 def update_medication(user_id, medication_id, body):
@@ -222,25 +210,16 @@ def update_medication(user_id, medication_id, body):
             ExpressionAttributeValues=expr_values,
             ReturnValues='ALL_NEW'
         )
-        
+
+        # For AWS integration type, return data directly
         return {
-            'statusCode': 200,
-            'headers': {
-                'Content-Type': 'application/json',
-                'Access-Control-Allow-Origin': '*'
-            },
-            'body': json.dumps({
-                'medication': response['Attributes'],
-                'message': 'Medication updated successfully'
-            })
+            'medication': response['Attributes'],
+            'message': 'Medication updated successfully'
         }
-    
+
     except Exception as e:
         print(f"Update error: {str(e)}")
-        return {
-            'statusCode': 500,
-            'body': json.dumps({'error': str(e)})
-        }
+        return {'error': str(e)}
 
 
 def delete_medication(user_id, medication_id):
@@ -249,30 +228,18 @@ def delete_medication(user_id, medication_id):
     """
     try:
         if not medication_id:
-            return {
-                'statusCode': 400,
-                'body': json.dumps({'error': 'medicationId is required'})
-            }
-        
+            return {'error': 'medicationId is required'}
+
         medications_table.delete_item(
             Key={
                 'userId': user_id,
                 'medicationId': medication_id
             }
         )
-        
-        return {
-            'statusCode': 200,
-            'headers': {
-                'Content-Type': 'application/json',
-                'Access-Control-Allow-Origin': '*'
-            },
-            'body': json.dumps({'message': 'Medication deleted successfully'})
-        }
-    
+
+        # For AWS integration type, return data directly
+        return {'message': 'Medication deleted successfully'}
+
     except Exception as e:
         print(f"Delete error: {str(e)}")
-        return {
-            'statusCode': 500,
-            'body': json.dumps({'error': str(e)})
-        }
+        return {'error': str(e)}

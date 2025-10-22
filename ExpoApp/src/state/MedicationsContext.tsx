@@ -1,5 +1,4 @@
 import React, {createContext, useCallback, useContext, useMemo, useState, useEffect} from 'react';
-import { get, post, put, del } from 'aws-amplify/api';
 import { fetchAuthSession } from 'aws-amplify/auth';
 import { monitoredAPICall } from '../utils/awsServiceHealth';
 
@@ -45,23 +44,27 @@ export function MedicationsProvider({children}: {children: React.ReactNode}) {
       const response = await monitoredAPICall(
         'API_GATEWAY',
         async () => {
-          return await get({
-            apiName: 'beaumedApi',
-            path: '/medications',
-            options: {
-              headers: {
-                'Authorization': `Bearer ${token}`,
-              },
+          return await fetch('https://dchf2ja7ti.execute-api.us-east-1.amazonaws.com/dev/medications', {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${token}`,
             },
-          }).response;
+          });
         },
         'us-east-1'
       );
 
-      const data = await response.body.json() as any;
+      const data = await response.json() as any;
       console.log('📋 Fetched medications:', data);
 
-      setItems(data.medications || []);
+      // Handle both direct response and wrapped response
+      if (data.medications) {
+        setItems(data.medications);
+      } else if (Array.isArray(data)) {
+        setItems(data);
+      } else {
+        setItems([]);
+      }
     } catch (error) {
       console.error('Failed to load medications:', error);
       setItems([]);
@@ -78,22 +81,23 @@ export function MedicationsProvider({children}: {children: React.ReactNode}) {
       const response = await monitoredAPICall(
         'API_GATEWAY',
         async () => {
-          return await post({
-            apiName: 'beaumedApi',
-            path: '/medications',
-            options: {
-              headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json',
-              },
-              body: payload,
+          return await fetch('https://dchf2ja7ti.execute-api.us-east-1.amazonaws.com/dev/medications', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json',
             },
-          }).response;
+            body: JSON.stringify(payload),
+          });
         },
         'us-east-1'
       );
 
-      const data = await response.body.json() as any;
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status} ${response.statusText}`);
+      }
+
+      const data = await response.json() as any;
       console.log('✅ Medication created:', data);
 
       // Refresh the list
@@ -114,22 +118,23 @@ export function MedicationsProvider({children}: {children: React.ReactNode}) {
       const response = await monitoredAPICall(
         'API_GATEWAY',
         async () => {
-          return await put({
-            apiName: 'beaumedApi',
-            path: `/medications/${medicationId}`,
-            options: {
-              headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json',
-              },
-              body: payload,
+          return await fetch(`https://dchf2ja7ti.execute-api.us-east-1.amazonaws.com/dev/medications/${medicationId}`, {
+            method: 'PUT',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json',
             },
-          }).response;
+            body: JSON.stringify(payload),
+          });
         },
         'us-east-1'
       );
 
-      const data = await response.body.json() as any;
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status} ${response.statusText}`);
+      }
+
+      const data = await response.json() as any;
       console.log('✅ Medication updated:', data);
 
       // Refresh the list
@@ -150,20 +155,21 @@ export function MedicationsProvider({children}: {children: React.ReactNode}) {
       const response = await monitoredAPICall(
         'API_GATEWAY',
         async () => {
-          return await del({
-            apiName: 'beaumedApi',
-            path: `/medications/${medicationId}`,
-            options: {
-              headers: {
-                'Authorization': `Bearer ${token}`,
-              },
+          return await fetch(`https://dchf2ja7ti.execute-api.us-east-1.amazonaws.com/dev/medications/${medicationId}`, {
+            method: 'DELETE',
+            headers: {
+              'Authorization': `Bearer ${token}`,
             },
-          }).response;
+          });
         },
         'us-east-1'
       );
 
-      const data = await response.body.json() as any;
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status} ${response.statusText}`);
+      }
+
+      const data = await response.json() as any;
       console.log('✅ Medication deleted:', data);
 
       // Refresh the list

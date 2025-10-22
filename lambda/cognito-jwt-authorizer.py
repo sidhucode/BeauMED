@@ -42,6 +42,11 @@ def lambda_handler(event, context):
             raise Exception('Unauthorized: Missing sub claim')
         
         # Return Allow policy with context
+        # Use wildcard resource to allow all methods in the API (avoids caching issues)
+        resource_parts = event['methodArn'].split('/')
+        base_arn = '/'.join(resource_parts[:2])  # arn:aws:execute-api:region:account:api-id/stage
+        wildcard_resource = f"{base_arn}/*"
+
         return {
             'principalId': user_id,
             'policyDocument': {
@@ -50,7 +55,7 @@ def lambda_handler(event, context):
                     {
                         'Action': 'execute-api:Invoke',
                         'Effect': 'Allow',
-                        'Resource': event['methodArn']
+                        'Resource': wildcard_resource
                     }
                 ]
             },
@@ -88,77 +93,79 @@ def validate_jwt(token):
         # Get JWT header to extract kid (key ID)
         unverified_header = jwt.get_unverified_header(token)
         kid = unverified_header.get('kid')
-        
+
         if not kid:
             raise Exception('Invalid token: Missing kid')
-        
-        # Fetch Cognito public keys
-        public_keys = get_cognito_public_keys()
-        
-        if kid not in public_keys:
+
+        # Fetch Cognito public keys (as JWK dict)
+        jwk_keys = get_cognito_jwk_keys()
+
+        if kid not in jwk_keys:
             raise Exception(f'Invalid token: Unknown kid {kid}')
-        
-        # Verify and decode JWT
-        public_key = public_keys[kid]
+
+        # Get the matching JWK
+        jwk = jwk_keys[kid]
+
+        # Decode and verify JWT using the JWK directly
         claims = jwt.decode(
             token,
-            public_key,
+            jwk,
             algorithms=['RS256'],
-            audience=COGNITO_APP_CLIENT_ID,
             options={
                 'verify_signature': True,
-                'verify_aud': False,  # AWS SDK doesn't set aud claim for user pools
-                'verify_iat': True
+                'verify_aud': False,  # Cognito doesn't set aud claim for user pools
+                'verify_iat': True,
+                'verify_exp': True
             }
         )
-        
+
         # Verify token is from correct user pool
-        if claims.get('iss') != f'https://cognito-idp.{COGNITO_REGION}.amazonaws.com/{COGNITO_USER_POOL_ID}':
-            raise Exception('Invalid token: Wrong issuer')
-        
+        expected_iss = f'https://cognito-idp.{COGNITO_REGION}.amazonaws.com/{COGNITO_USER_POOL_ID}'
+        if claims.get('iss') != expected_iss:
+            raise Exception(f'Invalid token: Wrong issuer. Expected {expected_iss}, got {claims.get("iss")}')
+
         return claims
-    
+
     except JWTError as e:
         raise Exception(f'JWT validation failed: {str(e)}')
     except Exception as e:
         raise Exception(f'Token validation error: {str(e)}')
 
 
-def get_cognito_public_keys():
+def get_cognito_jwk_keys():
     """
-    Fetch Cognito public keys (JWK format)
+    Fetch Cognito public keys in JWK format
     Caches keys for 1 hour to reduce API calls
+    Returns: dict mapping kid -> JWK dict
     """
     global keys_cache, keys_cache_time
-    
+
     current_time = time.time()
-    
+
     # Return cached keys if fresh (less than 1 hour old)
     if keys_cache and (current_time - keys_cache_time) < 3600:
         return keys_cache
-    
+
     try:
         # Construct JWK URL for Cognito
         jwk_url = f'https://cognito-idp.{COGNITO_REGION}.amazonaws.com/{COGNITO_USER_POOL_ID}/.well-known/jwks.json'
-        
+
         # Fetch JWK set from Cognito
         with urllib.request.urlopen(jwk_url, timeout=5) as response:
             jwk_set = json.loads(response.read().decode('utf-8'))
-        
-        # Convert JWK to usable public keys (kid -> key mapping)
-        public_keys = {}
+
+        # Create kid -> JWK mapping
+        jwk_keys = {}
         for key in jwk_set['keys']:
             kid = key['kid']
-            # Use python-jose to convert JWK to public key format
-            from jose.backends.rsa_backend import RSAKey
-            public_keys[kid] = RSAKey(key)
-        
+            jwk_keys[kid] = key
+
         # Cache the keys
-        keys_cache = public_keys
+        keys_cache = jwk_keys
         keys_cache_time = current_time
-        
-        return public_keys
-    
+
+        return jwk_keys
+
     except Exception as e:
         print(f"Error fetching Cognito JWK: {str(e)}")
         # Return cached keys as fallback, even if expired
