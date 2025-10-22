@@ -24,16 +24,29 @@ def lambda_handler(event, context):
     Main Lambda handler for prescription image analysis
     """
     try:
-        # Parse request body
-        body = json.loads(event.get('body', '{}'))
-        user_id = event['requestContext']['authorizer']['claims']['sub']  # From Cognito JWT
+        # Parse request body - handles both direct body and nested body structure
+        if isinstance(event.get('body'), str):
+            body = json.loads(event.get('body', '{}'))
+        elif isinstance(event.get('body'), dict):
+            body = event.get('body', {})
+        else:
+            body = {}
+
+        # Get user_id from authorizer context (handles both AWS and AWS_PROXY integration types)
+        try:
+            # AWS_PROXY integration type
+            user_id = event['requestContext']['authorizer']['claims']['sub']
+        except (KeyError, TypeError):
+            # AWS integration type - authorizer context is in different location
+            user_id = event['requestContext']['authorizer'].get('sub') or event['requestContext']['authorizer'].get('principalId')
+
+        if not user_id:
+            return {'error': 'Unauthorized - missing user ID'}
+
         s3_key = body.get('s3_key', '').strip()  # e.g., 'prescriptions/user123/image.jpg'
-        
+
         if not s3_key:
-            return {
-                'statusCode': 400,
-                'body': json.dumps({'error': 'S3 key is required'})
-            }
+            return {'error': 'S3 key is required'}
         
         # Call Textract to analyze the prescription image
         textract_response = textract.analyze_document(
@@ -82,29 +95,23 @@ def lambda_handler(event, context):
                     'dosage': med.get('dosage', 'Not specified'),
                     'frequency': med.get('frequency', 'Not specified'),
                     'prescriptionId': prescription_id,
-                    'timestamp': timestamp
+                    'active': True,
+                    'reminders': [],
+                    'createdAt': timestamp,
+                    'updatedAt': timestamp
                 }
             )
-        
+
+        # For AWS integration type, return data directly
         return {
-            'statusCode': 200,
-            'headers': {
-                'Content-Type': 'application/json',
-                'Access-Control-Allow-Origin': '*'
-            },
-            'body': json.dumps({
-                'prescriptionId': prescription_id,
-                'medications': medications,
-                'message': f'Successfully extracted {len(medications)} medications from prescription'
-            })
+            'prescriptionId': prescription_id,
+            'medications': medications,
+            'message': f'Successfully extracted {len(medications)} medications from prescription'
         }
-    
+
     except Exception as e:
         print(f"Error: {str(e)}")
-        return {
-            'statusCode': 500,
-            'body': json.dumps({'error': str(e)})
-        }
+        return {'error': str(e)}
 
 
 def parse_medications(text):

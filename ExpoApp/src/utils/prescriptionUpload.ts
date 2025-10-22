@@ -1,5 +1,5 @@
-import { post } from 'aws-amplify/api';
 import { fetchAuthSession } from 'aws-amplify/auth';
+import { monitoredAPICall } from './awsServiceHealth';
 
 export type PrescriptionUploadResult = {
   prescriptionId: string;
@@ -24,23 +24,26 @@ export async function getPresignedUploadUrl(fileName: string, contentType: strin
   const session = await fetchAuthSession();
   const token = session?.tokens?.idToken?.toString();
 
-  const response = await post({
-    apiName: 'beaumedApi',
-    path: '/get-upload-url',
-    options: {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: {
-        file_name: fileName,
-        content_type: contentType,
-        file_type: 'image',
-      },
+  const response = await monitoredAPICall(
+    'API_GATEWAY',
+    async () => {
+      return await fetch('https://dchf2ja7ti.execute-api.us-east-1.amazonaws.com/dev/get-upload-url', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          file_name: fileName,
+          content_type: contentType,
+          file_type: 'image',
+        }),
+      });
     },
-  }).response;
+    'us-east-1'
+  );
 
-  const data = await response.body.json() as any;
+  const data = await response.json() as any;
   return data;
 }
 
@@ -85,21 +88,24 @@ export async function analyzePrescription(s3Key: string): Promise<PrescriptionUp
   const session = await fetchAuthSession();
   const token = session?.tokens?.idToken?.toString();
 
-  const response = await post({
-    apiName: 'beaumedApi',
-    path: '/analyze-prescription',
-    options: {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: {
-        s3_key: s3Key,
-      },
+  const response = await monitoredAPICall(
+    'API_GATEWAY',
+    async () => {
+      return await fetch('https://dchf2ja7ti.execute-api.us-east-1.amazonaws.com/dev/analyze-prescription', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          s3_key: s3Key,
+        }),
+      });
     },
-  }).response;
+    'us-east-1'
+  );
 
-  const data = await response.body.json() as any;
+  const data = await response.json() as any;
   return {
     prescriptionId: data.prescriptionId,
     medications: data.medications || [],

@@ -18,27 +18,37 @@ def lambda_handler(event, context):
     Main Lambda handler for presigned URL generation
     """
     try:
-        # Parse request body
-        body = json.loads(event.get('body', '{}'))
-        user_id = event['requestContext']['authorizer']['claims']['sub']  # From Cognito JWT
+        # Parse request body - handles both direct body and nested body structure
+        if isinstance(event.get('body'), str):
+            body = json.loads(event.get('body', '{}'))
+        elif isinstance(event.get('body'), dict):
+            body = event.get('body', {})
+        else:
+            body = {}
+
+        # Get user_id from authorizer context (handles both AWS and AWS_PROXY integration types)
+        try:
+            # AWS_PROXY integration type
+            user_id = event['requestContext']['authorizer']['claims']['sub']
+        except (KeyError, TypeError):
+            # AWS integration type - authorizer context is in different location
+            user_id = event['requestContext']['authorizer'].get('sub') or event['requestContext']['authorizer'].get('principalId')
+
+        if not user_id:
+            return {'error': 'Unauthorized - missing user ID'}
+
         file_type = body.get('file_type', 'image').strip()  # 'image', 'document', 'medical-record'
         file_name = body.get('file_name', '').strip()
-        
+
         # Validate inputs
         if not file_name:
-            return {
-                'statusCode': 400,
-                'body': json.dumps({'error': 'file_name is required'})
-            }
-        
+            return {'error': 'file_name is required'}
+
         # Security: only allow certain file types
         allowed_types = ['image/jpeg', 'image/png', 'application/pdf', 'image/webp']
         content_type = body.get('content_type', 'image/jpeg').strip()
         if content_type not in allowed_types:
-            return {
-                'statusCode': 400,
-                'body': json.dumps({'error': f'Content type not allowed. Allowed: {", ".join(allowed_types)}'})
-            }
+            return {'error': f'Content type not allowed. Allowed: {", ".join(allowed_types)}'}
         
         # Generate S3 key with user isolation
         file_extension = file_name.split('.')[-1] if '.' in file_name else ''
@@ -61,27 +71,18 @@ def lambda_handler(event, context):
             },
             ExpiresIn=3600  # 1 hour
         )
-        
+
+        # For AWS integration type, return data directly
         return {
-            'statusCode': 200,
-            'headers': {
-                'Content-Type': 'application/json',
-                'Access-Control-Allow-Origin': '*'
-            },
-            'body': json.dumps({
-                's3_key': s3_key,
-                'presigned_post': presigned_post,  # For direct browser uploads
-                'presigned_get': presigned_get,    # For retrieving the file
-                'message': f'Presigned URL generated for {file_name}'
-            })
+            's3_key': s3_key,
+            'presigned_post': presigned_post,  # For direct browser uploads
+            'presigned_get': presigned_get,    # For retrieving the file
+            'message': f'Presigned URL generated for {file_name}'
         }
-    
+
     except Exception as e:
         print(f"Error: {str(e)}")
-        return {
-            'statusCode': 500,
-            'body': json.dumps({'error': str(e)})
-        }
+        return {'error': str(e)}
 
 
 def generate_presigned_post(s3_key, content_type, max_file_size):
