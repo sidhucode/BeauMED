@@ -14,8 +14,8 @@
     "pod:install": "cd ios && pod install && cd ..",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "start": "react-native start",
-    "start:reset": "react-native start --reset-cache",
+    "start": "node init && react-native start",
+    "start:reset": "node init && react-native start --reset-cache",
     "test": "jest",
     "test:watch": "jest --watch"
   },
